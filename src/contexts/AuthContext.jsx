@@ -1,7 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../firebase';
-// 👇 เพิ่ม getRedirectResult เข้ามาช่วยดักจับข้อมูล
-import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  GoogleAuthProvider, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  signOut,
+  signInAnonymously 
+} from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -14,49 +20,56 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. ทันทีที่โหลดเว็บ ให้เช็คก่อนเลยว่า "เพิ่งเด้งกลับมาจากหน้า Google หรือเปล่า?"
-    getRedirectResult(auth).catch((error) => {
-      console.error("มีปัญหาตอนเด้งกลับมาจาก Google:", error);
-    });
-
-    // 2. เฝ้าดูการเปลี่ยนสถานะ
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        // ถ้ามีคนล็อกอินอยู่แล้ว (Google หรือ Guest) ให้เก็บข้อมูลไว้
-        setCurrentUser(user);
-        setLoading(false);
-      } else {
-        // ถ้าไม่มีใครเลยจริงๆ ค่อยสร้าง Guest ใหม่
-        signInAnonymously(auth).then(() => {
-          setLoading(false);
-        }).catch((err) => {
-          console.error("สร้าง Guest ไม่สำเร็จ:", err);
-          setLoading(false);
+    const initAuth = async () => {
+      try {
+        // 1. รอผลจากการ Redirect ให้เสร็จก่อน (สำคัญมาก!)
+        await getRedirectResult(auth);
+        
+        // 2. ตรวจสอบสถานะการล็อกอิน
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+          if (user) {
+            // ถ้ามี User (ไม่ว่าเป็น Google หรือ Guest) ให้หยุด Loading ทันที
+            setCurrentUser(user);
+            setLoading(false);
+          } else {
+            // 3. ถ้าไม่มี User จริงๆ ถึงจะอนุญาตให้สร้าง Guest
+            try {
+              const guestResult = await signInAnonymously(auth);
+              setCurrentUser(guestResult.user);
+            } catch (err) {
+              console.error("สร้าง Guest ล้มเหลว:", err);
+            }
+            setLoading(false);
+          }
         });
-      }
-    });
 
-    return unsubscribe;
+        return unsubscribe;
+      } catch (error) {
+        console.error("Auth Init Error:", error);
+        setLoading(false);
+      }
+    };
+
+    initAuth();
   }, []);
 
   const loginWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      // 💡 เวทมนตร์: สั่งให้ออกจากร่าง Guest ก่อน ค่อยกระโดดไปหน้าล็อกอิน
-      if (currentUser?.isAnonymous) {
-        await signOut(auth);
-      }
+      // สั่งให้ออกจากร่างเดิมก่อนเพื่อให้ Redirect สะอาดที่สุด
+      await signOut(auth);
       await signInWithRedirect(auth, provider);
     } catch (error) {
-      console.error("เกิดข้อผิดพลาดตอนล็อกอิน Google:", error);
+      console.error("Login Error:", error);
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
+      // พอกด Logout ระบบ onAuthStateChanged ข้างบนจะพาเข้า Guest ให้อัตโนมัติ
     } catch (error) {
-      console.error("เกิดข้อผิดพลาดตอนออกจากระบบ:", error);
+      console.error("Logout Error:", error);
     }
   };
 
