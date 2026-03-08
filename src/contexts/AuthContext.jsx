@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth, db } from '../firebase'; // 👇 อย่าลืม import db มาด้วยนะครับ
+import { auth, db } from '../firebase';
 import { 
   onAuthStateChanged, 
   signInAnonymously, 
@@ -7,7 +7,7 @@ import {
   signInWithPopup, 
   signOut 
 } from 'firebase/auth';
-import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/firestore'; // 👈 เพิ่มเครื่องมือจัดการฐานข้อมูล
+import { collection, query, where, getDocs, writeBatch, doc } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -19,30 +19,26 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 🪄 ฟังก์ชันสำหรับโอนข้อมูลจาก Guest มายังบัญชีจริง
-  const transferGuestDataToUser = async (guestUid, newUid) => {
-    if (!guestUid || !newUid || guestUid === newUid) return;
-
+  // 🪄 ฟังก์ชันโอนข้อมูล (ปรับปรุงให้ปลอดภัยขึ้น)
+  const transferData = async (oldUid, newUid, newDisplayName) => {
+    if (!oldUid || !newUid || oldUid === newUid) return;
+    
     try {
-      const q = query(collection(db, "recipes"), where("authorId", "==", guestUid));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) return;
+      const q = query(collection(db, "recipes"), where("authorId", "==", oldUid));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return;
 
       const batch = writeBatch(db);
-      querySnapshot.forEach((recipeDoc) => {
-        const docRef = doc(db, "recipes", recipeDoc.id);
-        // เปลี่ยนเจ้าของเป็น UID ใหม่ และอัปเดตชื่อผู้เขียนให้เป็นชื่อจริง
-        batch.update(docRef, { 
+      snapshot.forEach((d) => {
+        batch.update(doc(db, "recipes", d.id), { 
           authorId: newUid,
-          author: auth.currentUser.displayName || "เชฟ Pinto"
+          author: newDisplayName || "เชฟ Pinto"
         });
       });
-
       await batch.commit();
-      console.log("โอนข้อมูลสำเร็จ!");
-    } catch (error) {
-      console.error("โอนข้อมูลไม่สำเร็จ:", error);
+      console.log("Transfer success!");
+    } catch (err) {
+      console.error("Transfer error:", err);
     }
   };
 
@@ -50,34 +46,40 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       setLoading(false);
+      
+      // ถ้าไม่มี user เลย ให้เข้า Guest
+      if (!user) {
+        signInAnonymously(auth).catch(console.error);
+      }
     });
     return unsubscribe;
   }, []);
 
   const loginWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    const guestUid = currentUser?.isAnonymous ? currentUser.uid : null; // จำ UID Guest ไว้ก่อน
+    // 1. จำ UID เดิมไว้ก่อน (ร่าง Guest)
+    const oldUid = currentUser?.isAnonymous ? currentUser.uid : null;
 
     try {
+      // 2. ล็อกอินใหม่
       const result = await signInWithPopup(auth, provider);
-      const newUid = result.user.uid;
+      const newUser = result.user;
 
-      // ถ้าก่อนหน้านี้เป็น Guest ให้สั่งโอนข้อมูลทันที
-      if (guestUid) {
-        await transferGuestDataToUser(guestUid, newUid);
+      // 3. ถ้าของเดิมเป็น Guest และล็อกอินใหม่สำเร็จ ให้สั่งโอนข้อมูล
+      if (oldUid && newUser.uid !== oldUid) {
+        await transferData(oldUid, newUser.uid, newUser.displayName);
       }
     } catch (error) {
-      console.error("Login Error:", error);
+      console.error("Login error:", error);
+      alert("ล็อกอินไม่สำเร็จ กรุณาลองใหม่อีกครั้งครับ");
     }
   };
 
   const logout = async () => {
     try {
       await signOut(auth);
-      // ระบบจะเด้งเข้า Guest ใหม่ให้อัตโนมัติจาก useEffect (ถ้าเราเขียนดักไว้)
-      // หรือจะปล่อยให้หน้าเว็บว่างจนกว่าจะรีเฟรชก็ได้ครับ
     } catch (error) {
-      console.error("Logout Error:", error);
+      console.error("Logout error:", error);
     }
   };
 
