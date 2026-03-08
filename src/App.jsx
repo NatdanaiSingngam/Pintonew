@@ -5,10 +5,9 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, u
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
 
-// 🧠 --- AI Helper Functions (NLP & Cosine Similarity) ---
+// 🧠 --- AI Helper Functions ---
 function getTermFrequency(text) {
   if (!text) return {};
-  // ตัดคำด้วยช่องว่างหรือลูกน้ำ
   const words = text.split(/[\s,]+/).filter(w => w.trim() !== '');
   const tf = {};
   words.forEach(w => {
@@ -35,7 +34,6 @@ function calculateCosineSimilarity(tf1, tf2) {
   if (mag1 === 0 || mag2 === 0) return 0;
   return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
 }
-// --------------------------------------------------------
 
 function App() {
   const { currentUser, loginWithGoogle, logout } = useAuth();
@@ -48,6 +46,9 @@ function App() {
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // 👇 1. สร้าง State สำหรับจำว่าตอนนี้เราอยู่แท็บไหน ('all' = ฟีดรวม, 'my_recipes' = สูตรฉัน, 'liked' = ถูกใจ)
+  const [filterTab, setFilterTab] = useState("all");
 
   useEffect(() => {
     const q = query(collection(db, "recipes"), orderBy("createdAt", "desc"));
@@ -72,20 +73,13 @@ function App() {
       alert("กรุณากรอกชื่อเมนูและเลือกรูปภาพด้วยนะครับ 🍳");
       return;
     }
-
     setIsUploading(true);
-
     try {
       const imageFormData = new FormData();
       imageFormData.append("image", imageFile);
-
-      const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-        method: "POST",
-        body: imageFormData
-      });
+      const imgbbRes = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imageFormData });
       const imgbbData = await imgbbRes.json();
       if (!imgbbData.success) throw new Error("อัปโหลดรูปภาพไม่สำเร็จ");
-
       const imageUrl = imgbbData.data.url; 
 
       await addDoc(collection(db, "recipes"), {
@@ -98,12 +92,12 @@ function App() {
         likedBy: [], 
         createdAt: serverTimestamp() 
       });
-
       alert("🎉 บันทึกสูตรอาหารสำเร็จ!");
       setIsCreating(false); 
       setFormData({ title: '', ingredients: '', instructions: '' }); 
       setImageFile(null);
       setImagePreview(null);
+      setFilterTab("all"); // สร้างเสร็จให้กลับมาหน้าฟีดรวม
     } catch (error) {
       console.error("Error adding document: ", error);
       alert("เกิดข้อผิดพลาด: " + error.message);
@@ -115,11 +109,12 @@ function App() {
   const handleLike = async (e, recipe) => {
     e.stopPropagation(); 
     const uid = currentUser?.uid;
-    if (!uid) return; 
-
+    if (!uid) {
+      alert("ต้องล็อกอินก่อนถึงจะกดไลก์ได้น้าา ❤️");
+      return; 
+    }
     const recipeRef = doc(db, "recipes", recipe.id);
     const hasLiked = recipe.likedBy && recipe.likedBy.includes(uid);
-
     try {
       if (hasLiked) {
         await updateDoc(recipeRef, { likedBy: arrayRemove(uid) });
@@ -128,7 +123,6 @@ function App() {
       }
     } catch (error) {
       console.error("Error liking recipe: ", error);
-      alert("เกิดข้อผิดพลาดในการกดไลก์ครับ");
     }
   };
 
@@ -140,28 +134,38 @@ function App() {
         alert("🗑️ ลบสูตรอาหารเรียบร้อยแล้วครับ");
       } catch (error) {
         console.error("Error deleting document: ", error);
-        alert("เกิดข้อผิดพลาดในการลบครับ");
       }
     }
   };
 
   const activeRecipe = selectedRecipe ? recipes.find(r => r.id === selectedRecipe.id) : null;
 
+  // 👇 2. กรองข้อมูลตาม "แท็บที่เลือก" และ "คำค้นหา" พร้อมๆ กัน
   const filteredRecipes = recipes.filter((recipe) => {
+    // กรองแท็บก่อน
+    let passesTab = true;
+    if (filterTab === "my_recipes") {
+      passesTab = currentUser && recipe.authorId === currentUser.uid;
+    } else if (filterTab === "liked") {
+      passesTab = currentUser && recipe.likedBy && recipe.likedBy.includes(currentUser.uid);
+    }
+
+    // แล้วค่อยกรองคำค้นหา
     const searchLower = searchQuery.toLowerCase();
     const matchTitle = recipe.title?.toLowerCase().includes(searchLower);
     const matchIngredients = recipe.ingredients?.toLowerCase().includes(searchLower);
-    return matchTitle || matchIngredients;
+    const passesSearch = matchTitle || matchIngredients;
+
+    return passesTab && passesSearch;
   });
 
   return (
     <div className="min-h-screen bg-gray-50 relative">
-      {/* --- Top Navbar --- */}
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex-shrink-0 flex items-center">
-              <h1 className="text-3xl font-extrabold text-orange-500 tracking-tight cursor-pointer">Pinto</h1>
+              <h1 className="text-3xl font-extrabold text-orange-500 tracking-tight cursor-pointer" onClick={() => setFilterTab("all")}>Pinto</h1>
             </div>
             
             <div className="flex-1 max-w-xl mx-8 hidden sm:block">
@@ -180,7 +184,10 @@ function App() {
             </div>
             
             <div className="flex items-center space-x-4">
-              <button onClick={() => setIsCreating(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-full font-medium transition-colors shadow-sm">
+              <button onClick={() => {
+                if(currentUser?.isAnonymous) { alert("ต้องล็อกอินด้วย Google ก่อนน้า ถึงจะสร้างสูตรได้ครับ 🧑‍🍳"); return; }
+                setIsCreating(true);
+              }} className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-full font-medium transition-colors shadow-sm">
                 + สร้างสูตร
               </button>
               
@@ -188,12 +195,18 @@ function App() {
                 {currentUser?.isAnonymous ? (
                   <button onClick={loginWithGoogle} className="flex items-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm">
                     <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
-                    <span>ล็อกอิน / สมัครสมาชิก</span>
+                    <span>ล็อกอิน / สมัคร</span>
                   </button>
                 ) : (
                   <div className="flex items-center space-x-3">
                     <span className="text-sm text-gray-700 font-medium hidden sm:block">สวัสดี, {currentUser?.displayName?.split(' ')[0] || 'เชฟ'}!</span>
-                    <img src={currentUser?.photoURL || "https://via.placeholder.com/40"} alt="Profile" onClick={logout} className="w-10 h-10 rounded-full border-2 border-orange-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-red-400" />
+                    <img 
+                      src={currentUser?.photoURL || "https://via.placeholder.com/40"} 
+                      alt="Profile" 
+                      onClick={() => { logout(); setFilterTab("all"); }} // ล็อกเอาท์ปุ๊บ ให้กลับไปแท็บรวม
+                      className="w-10 h-10 rounded-full border-2 border-orange-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-red-400" 
+                      title="ออกจากระบบ"
+                    />
                   </div>
                 )}
               </div>
@@ -202,11 +215,37 @@ function App() {
         </div>
       </nav>
 
-      {/* --- Main Content --- */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* 👇 3. เมนูเลือกแท็บ (จะโชว์เฉพาะตอนผู้ใช้ล็อกอินตัวจริงแล้วเท่านั้น) */}
+        {!currentUser?.isAnonymous && (
+          <div className="flex space-x-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+            <button
+              onClick={() => setFilterTab('all')}
+              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'all' ? 'bg-gray-800 text-white ring-2 ring-gray-800 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+            >
+              🌐 หน้าฟีดรวม
+            </button>
+            <button
+              onClick={() => setFilterTab('my_recipes')}
+              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white ring-2 ring-orange-500 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+            >
+              🍳 สูตรของฉัน
+            </button>
+            <button
+              onClick={() => setFilterTab('liked')}
+              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'liked' ? 'bg-red-500 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
+            >
+              ❤️ เมนูที่ถูกใจ
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">
-            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : "แนะนำสำหรับคุณ 🍋"}
+            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : 
+             filterTab === 'my_recipes' ? "สูตรอาหารที่คุณสร้างไว้ 👨‍🍳" :
+             filterTab === 'liked' ? "เมนูโปรดของคุณ ❤️" : "แนะนำสำหรับคุณ 🍋"}
           </h2>
         </div>
 
@@ -215,7 +254,9 @@ function App() {
         ) : filteredRecipes.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
             <span className="text-4xl block mb-4">🔍</span>
-            ไม่พบสูตรอาหารที่ตรงกับ "{searchQuery}" ลองค้นหาด้วยคำอื่นดูนะครับ
+            {filterTab === 'my_recipes' ? "คุณยังไม่ได้สร้างสูตรอาหารเลยครับ ลองกด '+ สร้างสูตร' ดูสิ!" :
+             filterTab === 'liked' ? "คุณยังไม่มีเมนูที่ถูกใจเลย ลองไปกด ❤️ ให้เมนูที่ชอบดูนะครับ" :
+             `ไม่พบสูตรอาหารที่ตรงกับ "${searchQuery}"`}
           </div>
         ) : (
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
@@ -224,7 +265,7 @@ function App() {
               const likeCount = recipe.likedBy ? recipe.likedBy.length : 0;
 
               return (
-                <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid hover:shadow-md transition-shadow cursor-pointer group">
+                <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid hover:shadow-md transition-shadow cursor-pointer group border border-gray-100">
                   <div className="w-full bg-gray-200 overflow-hidden relative">
                     <img src={recipe.image} alt={recipe.title} className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300" />
                     {currentUser?.uid === recipe.authorId && (
@@ -316,19 +357,18 @@ function App() {
                 <p className="text-gray-700 whitespace-pre-wrap">{activeRecipe.instructions || "ไม่ได้ระบุวิธีทำ"}</p>
               </div>
 
-              {/* 🧠 ----------------- AI Recommendation UI ----------------- */}
+              {/* 🧠 AI Recommendation */}
               {(() => {
                 const activeTf = getTermFrequency((activeRecipe.ingredients || "") + " " + (activeRecipe.title || ""));
-                
                 const recommended = recipes
                   .filter(r => r.id !== activeRecipe.id) 
                   .map(r => {
                     const rTf = getTermFrequency((r.ingredients || "") + " " + (r.title || ""));
                     return { ...r, similarityScore: calculateCosineSimilarity(activeTf, rTf) };
                   })
-                  .filter(r => r.similarityScore > 0.05) // กรองเฉพาะอันที่มีความเหมือนบ้าง
+                  .filter(r => r.similarityScore > 0.05) 
                   .sort((a, b) => b.similarityScore - a.similarityScore)
-                  .slice(0, 4); // โชว์ 4 อันดับแรก
+                  .slice(0, 4); 
 
                 if (recommended.length === 0) return null;
 
@@ -337,14 +377,14 @@ function App() {
                     <h3 className="font-bold text-gray-800 mb-4 flex items-center">
                       <span className="mr-2 text-xl">✨</span> เมนูที่คล้ายกัน (แนะนำสำหรับคุณ)
                     </h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4">
+                    <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
                       {recommended.map(rec => (
                         <div 
                           key={rec.id} 
                           onClick={(e) => { e.stopPropagation(); setSelectedRecipe(rec); }}
                           className="min-w-[140px] w-[140px] cursor-pointer group"
                         >
-                          <div className="h-24 w-full rounded-xl overflow-hidden mb-2 relative">
+                          <div className="h-24 w-full rounded-xl overflow-hidden mb-2 relative border border-gray-200">
                             <img src={rec.image} alt={rec.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                             <div className="absolute top-1 right-1 bg-white/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-orange-600 shadow-sm">
                               เหมือน {(rec.similarityScore * 100).toFixed(0)}%
@@ -357,14 +397,12 @@ function App() {
                   </div>
                 );
               })()}
-              {/* ----------------------------------------------------------- */}
-
             </div>
           </div>
         </div>
       )}
 
-      {/* --- Popup สร้างสูตร (เหมือนเดิม) --- */}
+      {/* --- Popup สร้างสูตร --- */}
       {isCreating && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative">
@@ -404,7 +442,6 @@ function App() {
           </div>
         </div>
       )}
-      
     </div>
   );
 }
