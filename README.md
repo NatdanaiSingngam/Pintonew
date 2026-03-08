@@ -1,16 +1,20 @@
-# React + Vite
+# 🍱 Pinto (ปิ่นโต) - AI-Powered Recipe Sharing Platform
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Pinto คือแอปพลิเคชันเว็บแบบ Full-Stack สำหรับแบ่งปันสูตรอาหาร ที่มาพร้อมกับระบบ AI สมองกลในการวิเคราะห์และแนะนำเมนูอาหารที่คล้ายคลึงกัน (AI Recommendation) พัฒนาด้วยสถาปัตยกรรมแบบ Serverless และรองรับระบบ CI/CD เต็มรูปแบบ
 
-Currently, two official plugins are available:
+## ✨ Features (ฟีเจอร์เด่น)
+* **🤖 AI Recipe Recommendation:** ใช้เทคนิค NLP (Term Frequency) และสมการคณิตศาสตร์ `Cosine Similarity` ในการคำนวณความคล้ายคลึงของวัตถุดิบ เพื่อแนะนำเมนูที่ตรงใจผู้ใช้มากที่สุด
+* **🔐 Seamless Authentication:** ระบบล็อกอินผ่าน Google Account และระบบ Guest Mode ที่มาพร้อม `Account Linking` (โอนข้อมูลจาก Guest ไปบัญชีจริงได้อัตโนมัติ)
+* **🗄️ Real-time Database & Security:** จัดการข้อมูลด้วย Firebase Firestore พร้อมเขียน `Security Rules` ป้องกันการเข้าถึงและแก้ไขข้อมูลจากผู้ไม่หวังดี 100%
+* **📸 Smart Image Management:** รองรับการอัปโหลดหลายรูปภาพ (Multiple Images) จัดการ UI แบบ Grid อัตโนมัติผ่าน ImgBB API
+* **🚀 Automated CI/CD Pipeline:** เชื่อมต่อ GitHub Actions เพื่อทำการ Build และ Deploy ขึ้น GitHub Pages ทันทีที่มีการ Push โค้ด (Zero-downtime deployment)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 🛠️ Tech Stack (เทคโนโลยีที่ใช้)
+* **Frontend:** React.js, Tailwind CSS
+* **Backend & BaaS:** Firebase (Authentication, Firestore Database)
+* **AI / Algorithm:** Natural Language Processing (TF), Vector Space Model (Cosine Similarity)
+* **DevOps / Hosting:** GitHub Actions, GitHub Pages
+* **External API:** ImgBB (Image Hosting)
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## 👨‍💻 Developer
+Developed with ❤️ by [ชื่อ-นามสกุลของคุณ]
