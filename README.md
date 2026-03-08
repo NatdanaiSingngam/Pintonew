@@ -17,4 +17,4 @@ Pinto คือแอปพลิเคชันเว็บแบบ Full-Stack
 * **External API:** ImgBB (Image Hosting)
 
 ## 👨‍💻 Developer
-Developed with ❤️ by [ชื่อ-นามสกุลของคุณ]
+Developed with ❤️ by [Natdanai Singngam]
