@@ -3,8 +3,39 @@ import { useAuth } from './contexts/AuthContext';
 import { db } from './firebase'; 
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 
-// 🔑 API Key ของนายครับ!
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
+
+// 🧠 --- AI Helper Functions (NLP & Cosine Similarity) ---
+function getTermFrequency(text) {
+  if (!text) return {};
+  // ตัดคำด้วยช่องว่างหรือลูกน้ำ
+  const words = text.split(/[\s,]+/).filter(w => w.trim() !== '');
+  const tf = {};
+  words.forEach(w => {
+    const word = w.toLowerCase();
+    tf[word] = (tf[word] || 0) + 1;
+  });
+  return tf;
+}
+
+function calculateCosineSimilarity(tf1, tf2) {
+  const uniqueWords = new Set([...Object.keys(tf1), ...Object.keys(tf2)]);
+  let dotProduct = 0;
+  let mag1 = 0;
+  let mag2 = 0;
+
+  uniqueWords.forEach(w => {
+    const val1 = tf1[w] || 0;
+    const val2 = tf2[w] || 0;
+    dotProduct += val1 * val2;
+    mag1 += val1 * val1;
+    mag2 += val2 * val2;
+  });
+
+  if (mag1 === 0 || mag2 === 0) return 0;
+  return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
+}
+// --------------------------------------------------------
 
 function App() {
   const { currentUser, loginWithGoogle, logout } = useAuth();
@@ -16,8 +47,6 @@ function App() {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
-
-  // 👇 1. เพิ่ม State สำหรับเก็บคำค้นหา
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -118,15 +147,10 @@ function App() {
 
   const activeRecipe = selectedRecipe ? recipes.find(r => r.id === selectedRecipe.id) : null;
 
-  // 👇 2. กรองข้อมูลสูตรอาหาร ตามคำค้นหาที่พิมพ์
   const filteredRecipes = recipes.filter((recipe) => {
-    // เอาคำค้นหาไปแปลงเป็นพิมพ์เล็กให้หมด จะได้ค้นหาง่ายขึ้น
     const searchLower = searchQuery.toLowerCase();
-    
-    // ค้นหาจากชื่อเมนู หรือ ส่วนผสม
     const matchTitle = recipe.title?.toLowerCase().includes(searchLower);
     const matchIngredients = recipe.ingredients?.toLowerCase().includes(searchLower);
-    
     return matchTitle || matchIngredients;
   });
 
@@ -140,24 +164,17 @@ function App() {
               <h1 className="text-3xl font-extrabold text-orange-500 tracking-tight cursor-pointer">Pinto</h1>
             </div>
             
-            {/* 👇 3. ผูกช่อง Search เข้ากับ State searchQuery */}
             <div className="flex-1 max-w-xl mx-8 hidden sm:block">
               <div className="relative">
                 <input 
                   type="text" 
-                  placeholder="ค้นหาสูตรอาหาร หรือส่วนผสม (เช่น หมูสามชั้น)..." 
+                  placeholder="ค้นหาสูตรอาหาร หรือส่วนผสม..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full bg-gray-100 rounded-full py-2 px-5 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" 
                 />
-                {/* ปุ่มกากบาทล้างคำค้นหา (โชว์เมื่อมีการพิมพ์) */}
                 {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-4 top-2 text-gray-400 hover:text-gray-600"
-                  >
-                    ✕
-                  </button>
+                  <button onClick={() => setSearchQuery("")} className="absolute right-4 top-2 text-gray-400 hover:text-gray-600">✕</button>
                 )}
               </div>
             </div>
@@ -189,11 +206,10 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">
-            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : "เมนูเด็ดของ Pinto 🍱"}
+            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : "แนะนำสำหรับคุณ 🍋"}
           </h2>
         </div>
 
-        {/* แสดงข้อความถ้าไม่มีข้อมูล */}
         {recipes.length === 0 ? (
           <div className="text-center py-20 text-gray-500">ยังไม่มีสูตรอาหารเลยครับ มาเป็นเชฟคนแรกของ Pinto กันเถอะ! 🍳</div>
         ) : filteredRecipes.length === 0 ? (
@@ -203,7 +219,6 @@ function App() {
           </div>
         ) : (
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-            {/* 👇 4. เปลี่ยนมาวนลูปจาก filteredRecipes แทน recipes เฉยๆ */}
             {filteredRecipes.map((recipe) => {
               const isLikedByMe = recipe.likedBy && recipe.likedBy.includes(currentUser?.uid);
               const likeCount = recipe.likedBy ? recipe.likedBy.length : 0;
@@ -212,7 +227,6 @@ function App() {
                 <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid hover:shadow-md transition-shadow cursor-pointer group">
                   <div className="w-full bg-gray-200 overflow-hidden relative">
                     <img src={recipe.image} alt={recipe.title} className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300" />
-                    
                     {currentUser?.uid === recipe.authorId && (
                       <button 
                         onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }}
@@ -232,7 +246,6 @@ function App() {
                         </div>
                         <span className="text-xs text-gray-500">{recipe.author}</span>
                       </div>
-                      
                       <button 
                         onClick={(e) => handleLike(e, recipe)}
                         className={`flex items-center text-xs px-2 py-1 rounded-full transition-colors border border-transparent 
@@ -240,7 +253,6 @@ function App() {
                       >
                         {isLikedByMe ? '❤️' : '🤍'} {likeCount}
                       </button>
-
                     </div>
                   </div>
                 </div>
@@ -257,10 +269,8 @@ function App() {
             <button onClick={() => setSelectedRecipe(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
             <img src={activeRecipe.image} alt={activeRecipe.title} className="w-full h-72 object-cover" />
             <div className="p-6">
-              
               <div className="flex justify-between items-start mb-4">
                 <h2 className="text-3xl font-bold text-gray-800">{activeRecipe.title}</h2>
-                
                 <div className="flex items-center space-x-2">
                   {currentUser?.uid === activeRecipe.authorId && (
                     <button 
@@ -270,11 +280,9 @@ function App() {
                       <span>🗑️ ลบ</span>
                     </button>
                   )}
-
                   {(() => {
                     const isLikedByMe = activeRecipe.likedBy && activeRecipe.likedBy.includes(currentUser?.uid);
                     const likeCount = activeRecipe.likedBy ? activeRecipe.likedBy.length : 0;
-                    
                     return (
                       <button 
                         onClick={(e) => handleLike(e, activeRecipe)}
@@ -297,14 +305,60 @@ function App() {
                   <p className="font-medium text-gray-800">{activeRecipe.author}</p>
                 </div>
               </div>
+
               <div className="bg-orange-50 rounded-2xl p-6 border border-orange-100 mb-4">
                 <h3 className="font-bold text-orange-800 mb-2">วัตถุดิบ 🥚</h3>
                 <p className="text-gray-700 whitespace-pre-wrap">{activeRecipe.ingredients || "ไม่ได้ระบุวัตถุดิบ"}</p>
               </div>
+
               <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
                 <h3 className="font-bold text-gray-800 mb-2">วิธีทำ 🍳</h3>
                 <p className="text-gray-700 whitespace-pre-wrap">{activeRecipe.instructions || "ไม่ได้ระบุวิธีทำ"}</p>
               </div>
+
+              {/* 🧠 ----------------- AI Recommendation UI ----------------- */}
+              {(() => {
+                const activeTf = getTermFrequency((activeRecipe.ingredients || "") + " " + (activeRecipe.title || ""));
+                
+                const recommended = recipes
+                  .filter(r => r.id !== activeRecipe.id) 
+                  .map(r => {
+                    const rTf = getTermFrequency((r.ingredients || "") + " " + (r.title || ""));
+                    return { ...r, similarityScore: calculateCosineSimilarity(activeTf, rTf) };
+                  })
+                  .filter(r => r.similarityScore > 0.05) // กรองเฉพาะอันที่มีความเหมือนบ้าง
+                  .sort((a, b) => b.similarityScore - a.similarityScore)
+                  .slice(0, 4); // โชว์ 4 อันดับแรก
+
+                if (recommended.length === 0) return null;
+
+                return (
+                  <div className="mt-8 pt-6 border-t border-gray-100">
+                    <h3 className="font-bold text-gray-800 mb-4 flex items-center">
+                      <span className="mr-2 text-xl">✨</span> เมนูที่คล้ายกัน (แนะนำสำหรับคุณ)
+                    </h3>
+                    <div className="flex gap-4 overflow-x-auto pb-4">
+                      {recommended.map(rec => (
+                        <div 
+                          key={rec.id} 
+                          onClick={(e) => { e.stopPropagation(); setSelectedRecipe(rec); }}
+                          className="min-w-[140px] w-[140px] cursor-pointer group"
+                        >
+                          <div className="h-24 w-full rounded-xl overflow-hidden mb-2 relative">
+                            <img src={rec.image} alt={rec.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                            <div className="absolute top-1 right-1 bg-white/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-orange-600 shadow-sm">
+                              เหมือน {(rec.similarityScore * 100).toFixed(0)}%
+                            </div>
+                          </div>
+                          <h4 className="text-sm font-bold text-gray-700 line-clamp-2 group-hover:text-orange-500">{rec.title}</h4>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
+              {/* ----------------------------------------------------------- */}
+
             </div>
           </div>
         </div>
@@ -328,7 +382,6 @@ function App() {
                 )}
                 <input type="file" accept="image/*" onChange={handleImageChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer border border-gray-300 rounded-xl p-2" />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อเมนู</label>
                 <input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border border-gray-300 rounded-xl py-2 px-4 focus:ring-2 focus:ring-orange-300" placeholder="เช่น กะเพราหมูสับไข่ดาว" />
