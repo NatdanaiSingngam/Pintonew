@@ -1,32 +1,57 @@
-// src/contexts/AuthContext.jsx
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../firebase';
-// นำเข้า signInWithRedirect เข้ามาแทน
-import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithRedirect, signOut } from 'firebase/auth';
+// 👇 เพิ่ม getRedirectResult เข้ามาช่วยดักจับข้อมูล
+import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 
-// 1. สร้าง Context (กระบอกเสียง)
 const AuthContext = createContext();
 
-// 2. สร้าง Hook เอาไว้ให้หน้าอื่นเรียกใช้ชื่อง่ายๆ ว่า useAuth()
 export function useAuth() {
   return useContext(AuthContext);
 }
 
-// 3. ตัวคลุมแอป (Provider)
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // 1. ทันทีที่โหลดเว็บ ให้เช็คก่อนเลยว่า "เพิ่งเด้งกลับมาจากหน้า Google หรือเปล่า?"
+    getRedirectResult(auth).catch((error) => {
+      console.error("มีปัญหาตอนเด้งกลับมาจาก Google:", error);
+    });
+
+    // 2. เฝ้าดูการเปลี่ยนสถานะ
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // ถ้ามีคนล็อกอินอยู่แล้ว (Google หรือ Guest) ให้เก็บข้อมูลไว้
+        setCurrentUser(user);
+        setLoading(false);
+      } else {
+        // ถ้าไม่มีใครเลยจริงๆ ค่อยสร้าง Guest ใหม่
+        signInAnonymously(auth).then(() => {
+          setLoading(false);
+        }).catch((err) => {
+          console.error("สร้าง Guest ไม่สำเร็จ:", err);
+          setLoading(false);
+        });
+      }
+    });
+
+    return unsubscribe;
+  }, []);
+
   const loginWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      // 👇 เปลี่ยนจาก Popup เป็น Redirect
-      await signInWithRedirect(auth, provider); 
+      // 💡 เวทมนตร์: สั่งให้ออกจากร่าง Guest ก่อน ค่อยกระโดดไปหน้าล็อกอิน
+      if (currentUser?.isAnonymous) {
+        await signOut(auth);
+      }
+      await signInWithRedirect(auth, provider);
     } catch (error) {
       console.error("เกิดข้อผิดพลาดตอนล็อกอิน Google:", error);
     }
   };
 
-  // ฟังก์ชันออกจากระบบ (เพื่อกลับไปเป็น Guest เหมือนเดิม)
   const logout = async () => {
     try {
       await signOut(auth);
@@ -35,31 +60,7 @@ export function AuthProvider({ children }) {
     }
   };
 
-  useEffect(() => {
-    // ดักฟังว่ามีใครล็อกอินอยู่ไหม
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        // มีคนล็อกอินอยู่ (อาจจะเป็น Guest หรือล็อกอิน Google แล้ว)
-        console.log("Current User:", user.uid, "| Is Guest:", user.isAnonymous);
-        setCurrentUser(user);
-        setLoading(false);
-      } else {
-        // ถ้าไม่มีใครล็อกอินเลย -> เสกบัญชี Guest ให้ทันที!
-        try {
-          console.log("No user found. Creating Anonymous Guest...");
-          await signInAnonymously(auth);
-        } catch (error) {
-          console.error("Error creating guest:", error);
-          setLoading(false);
-        }
-      }
-    });
-
-    return unsubscribe; // ล้างการดักฟังเมื่อปิดเว็บ
-  }, []);
-
   return (
-    // 👇 เพิ่ม loginWithGoogle และ logout เข้าไปใน value ครับ
     <AuthContext.Provider value={{ currentUser, loginWithGoogle, logout }}>
       {!loading && children}
     </AuthContext.Provider>
