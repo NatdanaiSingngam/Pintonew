@@ -189,7 +189,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-800">
-            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : "แนะนำสำหรับคุณ 🍋"}
+            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : "เมนูเด็ดของ Pinto 🍱"}
           </h2>
         </div>
 

@@ -1,0 +1,33 @@
+name: Deploy Pinto App Auto 🚀
+
+on:
+  push:
+    branches:
+      - main # หุ่นยนต์จะตื่นขึ้นมาทำงาน เมื่อมีการ Push โค้ดเข้าสาขา main
+
+permissions:
+  contents: write # ให้สิทธิ์หุ่นยนต์ในการอัปเดตเว็บ
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 ดึงโค้ดล่าสุดมา
+        uses: actions/checkout@v4
+
+      - name: ⚙️ ตั้งค่า Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: 📦 ติดตั้งเครื่องมือ (npm install)
+        run: npm install
+
+      - name: 🛠️ แพ็คเว็บ (npm run build)
+        run: npm run build
+
+      - name: 🌐 อัปโหลดขึ้น GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
