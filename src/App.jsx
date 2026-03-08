@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { db } from './firebase'; 
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, where } from 'firebase/firestore';
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
 
@@ -41,16 +41,15 @@ function App() {
   const [isCreating, setIsCreating] = useState(false);
   const [recipes, setRecipes] = useState([]);
   
-  const [formData, setFormData] = useState({ title: '', ingredients: '', instructions: '' });
+  const [formData, setFormData] = useState({ title: '', ingredients: '', instructions: '', isPublic: true });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-
-  // 👇 1. สร้าง State สำหรับจำว่าตอนนี้เราอยู่แท็บไหน ('all' = ฟีดรวม, 'my_recipes' = สูตรฉัน, 'liked' = ถูกใจ)
   const [filterTab, setFilterTab] = useState("all");
 
   useEffect(() => {
+    // ดึงข้อมูลทั้งหมดมาจัดการ Filter ที่ Client-side เพื่อความรวดเร็วในการสลับแท็บ
     const q = query(collection(db, "recipes"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const recipesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -87,17 +86,18 @@ function App() {
         image: imageUrl,
         ingredients: formData.ingredients,
         instructions: formData.instructions,
-        author: currentUser?.displayName || "เชฟนิรนาม", 
+        isPublic: formData.isPublic, // เก็บสถานะ Public/Private
+        author: currentUser?.isAnonymous ? "เชฟนิรนาม (Guest)" : (currentUser?.displayName || "เชฟนิรนาม"), 
         authorId: currentUser?.uid,
         likedBy: [], 
         createdAt: serverTimestamp() 
       });
       alert("🎉 บันทึกสูตรอาหารสำเร็จ!");
       setIsCreating(false); 
-      setFormData({ title: '', ingredients: '', instructions: '' }); 
+      setFormData({ title: '', ingredients: '', instructions: '', isPublic: true }); 
       setImageFile(null);
       setImagePreview(null);
-      setFilterTab("all"); // สร้างเสร็จให้กลับมาหน้าฟีดรวม
+      setFilterTab(formData.isPublic ? "all" : "my_recipes"); 
     } catch (error) {
       console.error("Error adding document: ", error);
       alert("เกิดข้อผิดพลาด: " + error.message);
@@ -109,10 +109,7 @@ function App() {
   const handleLike = async (e, recipe) => {
     e.stopPropagation(); 
     const uid = currentUser?.uid;
-    if (!uid) {
-      alert("ต้องล็อกอินก่อนถึงจะกดไลก์ได้น้าา ❤️");
-      return; 
-    }
+    if (!uid) return;
     const recipeRef = doc(db, "recipes", recipe.id);
     const hasLiked = recipe.likedBy && recipe.likedBy.includes(uid);
     try {
@@ -127,36 +124,37 @@ function App() {
   };
 
   const handleDeleteRecipe = async (recipeId) => {
-    if (window.confirm("แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺")) {
+    if (window.confirm("แน่ใจนะว่าจะลบสูตรอาหารนี้?")) {
       try {
         await deleteDoc(doc(db, "recipes", recipeId));
         setSelectedRecipe(null); 
-        alert("🗑️ ลบสูตรอาหารเรียบร้อยแล้วครับ");
       } catch (error) {
         console.error("Error deleting document: ", error);
       }
     }
   };
 
-  const activeRecipe = selectedRecipe ? recipes.find(r => r.id === selectedRecipe.id) : null;
-
-  // 👇 2. กรองข้อมูลตาม "แท็บที่เลือก" และ "คำค้นหา" พร้อมๆ กัน
+  // 🔍 กรองข้อมูลตามเงื่อนไขที่นายต้องการ
   const filteredRecipes = recipes.filter((recipe) => {
-    // กรองแท็บก่อน
-    let passesTab = true;
-    if (filterTab === "my_recipes") {
-      passesTab = currentUser && recipe.authorId === currentUser.uid;
+    const isOwner = currentUser && recipe.authorId === currentUser.uid;
+    const isPublic = recipe.isPublic === true;
+    
+    let passesTab = false;
+    if (filterTab === "all") {
+      // หน้าฟีดรวม: โชว์เฉพาะอันที่เป็น Public เท่านั้น (ไม่ว่าจะเป็นของใคร)
+      passesTab = isPublic;
+    } else if (filterTab === "my_recipes") {
+      // หน้าสูตรของฉัน: โชว์ทุกอันที่เราเป็นเจ้าของ (ทั้ง Public และ Private)
+      passesTab = isOwner;
     } else if (filterTab === "liked") {
-      passesTab = currentUser && recipe.likedBy && recipe.likedBy.includes(currentUser.uid);
+      // หน้าที่ถูกใจ: โชว์อันที่เรากดไลก์ และต้องเป็นอันที่ยังเป็น Public อยู่ (ยกเว้นเราเป็นเจ้าของเอง)
+      passesTab = currentUser && recipe.likedBy?.includes(currentUser.uid) && (isPublic || isOwner);
     }
 
-    // แล้วค่อยกรองคำค้นหา
     const searchLower = searchQuery.toLowerCase();
-    const matchTitle = recipe.title?.toLowerCase().includes(searchLower);
-    const matchIngredients = recipe.ingredients?.toLowerCase().includes(searchLower);
-    const passesSearch = matchTitle || matchIngredients;
+    const matchSearch = recipe.title?.toLowerCase().includes(searchLower) || recipe.ingredients?.toLowerCase().includes(searchLower);
 
-    return passesTab && passesSearch;
+    return passesTab && matchSearch;
   });
 
   return (
@@ -169,45 +167,28 @@ function App() {
             </div>
             
             <div className="flex-1 max-w-xl mx-8 hidden sm:block">
-              <div className="relative">
-                <input 
-                  type="text" 
-                  placeholder="ค้นหาสูตรอาหาร หรือส่วนผสม..." 
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-gray-100 rounded-full py-2 px-5 focus:outline-none focus:ring-2 focus:ring-orange-300 transition-all" 
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="absolute right-4 top-2 text-gray-400 hover:text-gray-600">✕</button>
-                )}
-              </div>
+              <input 
+                type="text" 
+                placeholder="ค้นหาสูตรอาหาร..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-gray-100 rounded-full py-2 px-5 focus:outline-none focus:ring-2 focus:ring-orange-300" 
+              />
             </div>
             
             <div className="flex items-center space-x-4">
-              <button onClick={() => {
-                if(currentUser?.isAnonymous) { alert("ต้องล็อกอินด้วย Google ก่อนน้า ถึงจะสร้างสูตรได้ครับ 🧑‍🍳"); return; }
-                setIsCreating(true);
-              }} className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-full font-medium transition-colors shadow-sm">
+              <button onClick={() => setIsCreating(true)} className="bg-orange-500 hover:bg-orange-600 text-white px-5 py-2 rounded-full font-medium transition-colors">
                 + สร้างสูตร
               </button>
               
-              <div className="flex items-center space-x-2">
+              <div>
                 {currentUser?.isAnonymous ? (
-                  <button onClick={loginWithGoogle} className="flex items-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-full text-sm font-medium transition-colors shadow-sm">
-                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-4 h-4" />
-                    <span>ล็อกอิน / สมัคร</span>
+                  <button onClick={loginWithGoogle} className="flex items-center space-x-2 bg-white border border-gray-300 px-4 py-2 rounded-full text-sm font-medium hover:bg-gray-50">
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="G" className="w-4 h-4" />
+                    <span>ล็อกอิน</span>
                   </button>
                 ) : (
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-700 font-medium hidden sm:block">สวัสดี, {currentUser?.displayName?.split(' ')[0] || 'เชฟ'}!</span>
-                    <img 
-                      src={currentUser?.photoURL || "https://via.placeholder.com/40"} 
-                      alt="Profile" 
-                      onClick={() => { logout(); setFilterTab("all"); }} // ล็อกเอาท์ปุ๊บ ให้กลับไปแท็บรวม
-                      className="w-10 h-10 rounded-full border-2 border-orange-200 shadow-sm cursor-pointer hover:ring-2 hover:ring-red-400" 
-                      title="ออกจากระบบ"
-                    />
-                  </div>
+                  <img src={currentUser?.photoURL} alt="P" onClick={logout} className="w-10 h-10 rounded-full border-2 border-orange-200 cursor-pointer hover:opacity-80" title="ออกจากระบบ" />
                 )}
               </div>
             </div>
@@ -216,229 +197,91 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* 👇 3. เมนูเลือกแท็บ (จะโชว์เฉพาะตอนผู้ใช้ล็อกอินตัวจริงแล้วเท่านั้น) */}
-        {!currentUser?.isAnonymous && (
-          <div className="flex space-x-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-            <button
-              onClick={() => setFilterTab('all')}
-              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'all' ? 'bg-gray-800 text-white ring-2 ring-gray-800 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
-            >
-              🌐 หน้าฟีดรวม
-            </button>
-            <button
-              onClick={() => setFilterTab('my_recipes')}
-              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white ring-2 ring-orange-500 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
-            >
-              🍳 สูตรของฉัน
-            </button>
-            <button
-              onClick={() => setFilterTab('liked')}
-              className={`px-5 py-2.5 rounded-full text-sm font-bold whitespace-nowrap transition-all shadow-sm ${filterTab === 'liked' ? 'bg-red-500 text-white ring-2 ring-red-500 ring-offset-2' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'}`}
-            >
-              ❤️ เมนูที่ถูกใจ
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">
-            {searchQuery ? `ผลการค้นหาสำหรับ: "${searchQuery}"` : 
-             filterTab === 'my_recipes' ? "สูตรอาหารที่คุณสร้างไว้ 👨‍🍳" :
-             filterTab === 'liked' ? "เมนูโปรดของคุณ ❤️" : "แนะนำสำหรับคุณ 🍋"}
-          </h2>
+        {/* แท็บเมนู */}
+        <div className="flex space-x-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+          <button onClick={() => setFilterTab('all')} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${filterTab === 'all' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 border'}`}>🌐 ฟีดรวม</button>
+          <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white' : 'bg-white text-gray-600 border'}`}>🍳 สูตรของฉัน</button>
+          <button onClick={() => setFilterTab('liked')} className={`px-5 py-2 rounded-full text-sm font-bold transition-all ${filterTab === 'liked' ? 'bg-red-500 text-white' : 'bg-white text-gray-600 border'}`}>❤️ ที่ถูกใจ</button>
         </div>
 
-        {recipes.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">ยังไม่มีสูตรอาหารเลยครับ มาเป็นเชฟคนแรกของ Pinto กันเถอะ! 🍳</div>
-        ) : filteredRecipes.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            <span className="text-4xl block mb-4">🔍</span>
-            {filterTab === 'my_recipes' ? "คุณยังไม่ได้สร้างสูตรอาหารเลยครับ ลองกด '+ สร้างสูตร' ดูสิ!" :
-             filterTab === 'liked' ? "คุณยังไม่มีเมนูที่ถูกใจเลย ลองไปกด ❤️ ให้เมนูที่ชอบดูนะครับ" :
-             `ไม่พบสูตรอาหารที่ตรงกับ "${searchQuery}"`}
-          </div>
-        ) : (
-          <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-            {filteredRecipes.map((recipe) => {
-              const isLikedByMe = recipe.likedBy && recipe.likedBy.includes(currentUser?.uid);
-              const likeCount = recipe.likedBy ? recipe.likedBy.length : 0;
-
-              return (
-                <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid hover:shadow-md transition-shadow cursor-pointer group border border-gray-100">
-                  <div className="w-full bg-gray-200 overflow-hidden relative">
-                    <img src={recipe.image} alt={recipe.title} className="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-300" />
-                    {currentUser?.uid === recipe.authorId && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }}
-                        className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm opacity-0 group-hover:opacity-100"
-                        title="ลบสูตรนี้"
-                      >
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                  <div className="p-4">
-                    <h3 className="font-bold text-gray-800 line-clamp-2 mb-2">{recipe.title}</h3>
-                    <div className="flex items-center justify-between mt-3">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-6 h-6 bg-orange-200 rounded-full flex items-center justify-center text-xs font-bold text-orange-600">
-                          {recipe.author ? recipe.author[0] : 'U'}
-                        </div>
-                        <span className="text-xs text-gray-500">{recipe.author}</span>
-                      </div>
-                      <button 
-                        onClick={(e) => handleLike(e, recipe)}
-                        className={`flex items-center text-xs px-2 py-1 rounded-full transition-colors border border-transparent 
-                          ${isLikedByMe ? 'text-red-500 bg-red-50' : 'text-gray-500 bg-gray-50 hover:text-red-500 hover:bg-red-50'}`}
-                      >
-                        {isLikedByMe ? '❤️' : '🤍'} {likeCount}
-                      </button>
-                    </div>
-                  </div>
+        <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+          {filteredRecipes.map((recipe) => (
+            <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid hover:shadow-md transition-shadow cursor-pointer border relative group">
+              {!recipe.isPublic && (
+                <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full backdrop-blur-sm z-10">🔒 ส่วนตัว</div>
+              )}
+              <img src={recipe.image} alt={recipe.title} className="w-full h-auto object-cover" />
+              <div className="p-4">
+                <h3 className="font-bold text-gray-800 line-clamp-2">{recipe.title}</h3>
+                <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+                  <span>{recipe.author}</span>
+                  <button onClick={(e) => handleLike(e, recipe)} className={recipe.likedBy?.includes(currentUser?.uid) ? 'text-red-500' : 'text-gray-400'}>
+                    {recipe.likedBy?.includes(currentUser?.uid) ? '❤️' : '🤍'} {recipe.likedBy?.length || 0}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
 
-      {/* --- Popup ดูสูตร --- */}
-      {activeRecipe && (
+      {/* --- Popup สร้างสูตร (เพิ่มตัวเลือก Public/Private) --- */}
+      {isCreating && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl relative">
-            <button onClick={() => setSelectedRecipe(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
-            <img src={activeRecipe.image} alt={activeRecipe.title} className="w-full h-72 object-cover" />
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-3xl font-bold text-gray-800">{activeRecipe.title}</h2>
-                <div className="flex items-center space-x-2">
-                  {currentUser?.uid === activeRecipe.authorId && (
-                    <button 
-                      onClick={() => handleDeleteRecipe(activeRecipe.id)}
-                      className="flex items-center space-x-1 px-4 py-2 rounded-full font-bold bg-gray-100 text-gray-500 hover:bg-red-500 hover:text-white transition-colors shadow-sm"
-                    >
-                      <span>🗑️ ลบ</span>
-                    </button>
-                  )}
-                  {(() => {
-                    const isLikedByMe = activeRecipe.likedBy && activeRecipe.likedBy.includes(currentUser?.uid);
-                    const likeCount = activeRecipe.likedBy ? activeRecipe.likedBy.length : 0;
-                    return (
-                      <button 
-                        onClick={(e) => handleLike(e, activeRecipe)}
-                        className={`flex items-center space-x-1 px-4 py-2 rounded-full font-bold transition-colors shadow-sm
-                          ${isLikedByMe ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500'}`}
-                      >
-                        <span>{isLikedByMe ? '❤️' : '🤍'}</span>
-                        <span>{likeCount}</span>
-                      </button>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-4 mb-6 pb-6 border-b border-gray-100">
-                <div className="w-10 h-10 bg-orange-200 rounded-full flex items-center justify-center font-bold text-orange-600">
-                  {activeRecipe.author ? activeRecipe.author[0] : 'U'}
-                </div>
+          <div className="bg-white rounded-3xl w-full max-w-xl p-6 relative shadow-2xl">
+            <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
+            <h2 className="text-xl font-bold mb-6">จดสูตรอาหารใหม่ ✍️</h2>
+            <form onSubmit={handleSubmitRecipe} className="space-y-4">
+              {imagePreview && <img src={imagePreview} className="w-full h-40 object-cover rounded-xl border" />}
+              <input type="file" accept="image/*" onChange={handleImageChange} className="w-full text-sm border p-2 rounded-xl" />
+              <input type="text" placeholder="ชื่อเมนู" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl focus:ring-2 focus:ring-orange-300 outline-none" />
+              <textarea placeholder="ส่วนผสม" value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none" rows="2"></textarea>
+              <textarea placeholder="วิธีทำ" value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none" rows="3"></textarea>
+              
+              {/* 🔒 ส่วนเลือกความเป็นส่วนตัว */}
+              <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300">
                 <div>
-                  <p className="font-medium text-gray-800">{activeRecipe.author}</p>
+                  <p className="text-sm font-bold text-gray-700">การมองเห็น</p>
+                  <p className="text-xs text-gray-500">{formData.isPublic ? "ทุกคนสามารถเห็นสูตรนี้ได้" : "เห็นได้เฉพาะคุณเท่านั้น"}</p>
+                </div>
+                <div 
+                  onClick={() => setFormData({...formData, isPublic: !formData.isPublic})}
+                  className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors ${formData.isPublic ? 'bg-green-500' : 'bg-gray-400'}`}
+                >
+                  <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${formData.isPublic ? 'translate-x-6' : ''}`}></div>
                 </div>
               </div>
 
-              <div className="bg-orange-50 rounded-2xl p-6 border border-orange-100 mb-4">
-                <h3 className="font-bold text-orange-800 mb-2">วัตถุดิบ 🥚</h3>
-                <p className="text-gray-700 whitespace-pre-wrap">{activeRecipe.ingredients || "ไม่ได้ระบุวัตถุดิบ"}</p>
-              </div>
-
-              <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-                <h3 className="font-bold text-gray-800 mb-2">วิธีทำ 🍳</h3>
-                <p className="text-gray-700 whitespace-pre-wrap">{activeRecipe.instructions || "ไม่ได้ระบุวิธีทำ"}</p>
-              </div>
-
-              {/* 🧠 AI Recommendation */}
-              {(() => {
-                const activeTf = getTermFrequency((activeRecipe.ingredients || "") + " " + (activeRecipe.title || ""));
-                const recommended = recipes
-                  .filter(r => r.id !== activeRecipe.id) 
-                  .map(r => {
-                    const rTf = getTermFrequency((r.ingredients || "") + " " + (r.title || ""));
-                    return { ...r, similarityScore: calculateCosineSimilarity(activeTf, rTf) };
-                  })
-                  .filter(r => r.similarityScore > 0.05) 
-                  .sort((a, b) => b.similarityScore - a.similarityScore)
-                  .slice(0, 4); 
-
-                if (recommended.length === 0) return null;
-
-                return (
-                  <div className="mt-8 pt-6 border-t border-gray-100">
-                    <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                      <span className="mr-2 text-xl">✨</span> เมนูที่คล้ายกัน (แนะนำสำหรับคุณ)
-                    </h3>
-                    <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                      {recommended.map(rec => (
-                        <div 
-                          key={rec.id} 
-                          onClick={(e) => { e.stopPropagation(); setSelectedRecipe(rec); }}
-                          className="min-w-[140px] w-[140px] cursor-pointer group"
-                        >
-                          <div className="h-24 w-full rounded-xl overflow-hidden mb-2 relative border border-gray-200">
-                            <img src={rec.image} alt={rec.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
-                            <div className="absolute top-1 right-1 bg-white/90 px-1.5 py-0.5 rounded text-[10px] font-bold text-orange-600 shadow-sm">
-                              เหมือน {(rec.similarityScore * 100).toFixed(0)}%
-                            </div>
-                          </div>
-                          <h4 className="text-sm font-bold text-gray-700 line-clamp-2 group-hover:text-orange-500">{rec.title}</h4>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
+              <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50">
+                {isUploading ? "กำลังบันทึก..." : "บันทึกสูตร"}
+              </button>
+            </form>
           </div>
         </div>
       )}
 
-      {/* --- Popup สร้างสูตร --- */}
-      {isCreating && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative">
-            <button onClick={() => setIsCreating(false)} disabled={isUploading} className="absolute top-4 right-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full w-8 h-8 flex items-center justify-center z-10 disabled:opacity-50">✕</button>
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">🍳 สร้างสูตรอาหารใหม่</h2>
-            
-            <form className="space-y-4" onSubmit={handleSubmitRecipe}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">รูปภาพอาหาร</label>
-                {imagePreview && (
-                  <div className="mb-3 relative rounded-xl overflow-hidden h-48 bg-gray-100 border border-gray-200">
-                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                    <button type="button" onClick={() => { setImageFile(null); setImagePreview(null); }} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 w-8 h-8 flex items-center justify-center hover:bg-red-600">✕</button>
-                  </div>
+      {/* --- Popup ดูสูตร --- */}
+      {selectedRecipe && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedRecipe(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-0 relative" onClick={e => e.stopPropagation()}>
+            <img src={selectedRecipe.image} className="w-full h-64 object-cover" />
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-2xl font-bold">{selectedRecipe.title}</h2>
+                {currentUser?.uid === selectedRecipe.authorId && (
+                  <button onClick={() => handleDeleteRecipe(selectedRecipe.id)} className="text-red-500 text-sm font-bold border border-red-200 px-3 py-1 rounded-full hover:bg-red-50">ลบสูตร</button>
                 )}
-                <input type="file" accept="image/*" onChange={handleImageChange} className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100 cursor-pointer border border-gray-300 rounded-xl p-2" />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อเมนู</label>
-                <input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border border-gray-300 rounded-xl py-2 px-4 focus:ring-2 focus:ring-orange-300" placeholder="เช่น กะเพราหมูสับไข่ดาว" />
+              <p className="text-sm text-gray-500 mb-6">โดย {selectedRecipe.author} {selectedRecipe.isPublic ? "🌍 สาธารณะ" : "🔒 ส่วนตัว"}</p>
+              <div className="bg-orange-50 p-4 rounded-xl mb-4">
+                <h4 className="font-bold text-orange-800 mb-2">วัตถุดิบ</h4>
+                <p className="text-gray-700 whitespace-pre-wrap">{selectedRecipe.ingredients}</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">ส่วนผสม</label>
-                <textarea value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} rows="3" className="w-full border border-gray-300 rounded-xl py-2 px-4 focus:ring-2 focus:ring-orange-300" placeholder="หมูสับ, ใบกะเพรา..."></textarea>
+              <div className="bg-gray-50 p-4 rounded-xl">
+                <h4 className="font-bold text-gray-800 mb-2">วิธีทำ</h4>
+                <p className="text-gray-700 whitespace-pre-wrap">{selectedRecipe.instructions}</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">วิธีทำ</label>
-                <textarea value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} rows="4" className="w-full border border-gray-300 rounded-xl py-2 px-4 focus:ring-2 focus:ring-orange-300" placeholder="1. ตั้งกระทะ..."></textarea>
-              </div>
-              <div className="pt-4 border-t border-gray-100 flex justify-end space-x-3 mt-6">
-                <button type="button" onClick={() => setIsCreating(false)} disabled={isUploading} className="px-5 py-2 rounded-full font-medium text-gray-600 hover:bg-gray-100 disabled:opacity-50">ยกเลิก</button>
-                <button type="submit" disabled={isUploading} className="px-5 py-2 rounded-full font-medium text-white bg-orange-500 hover:bg-orange-600 shadow-sm disabled:opacity-70 disabled:cursor-not-allowed flex items-center">
-                  {isUploading ? "⏳ กำลังอัปโหลด..." : "บันทึกสูตร"}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
