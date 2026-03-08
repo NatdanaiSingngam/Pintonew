@@ -4,7 +4,8 @@ import {
   onAuthStateChanged, 
   signInAnonymously, 
   GoogleAuthProvider, 
-  signInWithPopup, // 👈 กลับมาใช้ Popup
+  signInWithPopup, 
+  linkWithPopup, // 👈 เพิ่มตัวนี้เข้ามา
   signOut 
 } from 'firebase/auth';
 
@@ -19,31 +20,37 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // เฝ้าดูสถานะผู้ใช้
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
         setLoading(false);
       } else {
-        // ถ้าไม่มีใครล็อกอิน ให้เข้าโหมด Guest อัตโนมัติ
         signInAnonymously(auth).catch((err) => {
           console.error("Guest login failed:", err);
+          setLoading(false);
         });
       }
     });
-
     return unsubscribe;
   }, []);
 
   const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      // 💡 ใช้ Popup จะไม่มีปัญหาเรื่องลืมสถานะตอนเด้งกลับมา
-      await signInWithPopup(auth, provider);
+      if (currentUser && currentUser.isAnonymous) {
+        // 🔥 เวทมนตร์อยู่ตรงนี้: ถ้าเป็น Guest ให้เอาบัญชี Google มา "ผูก" แทนที่
+        await linkWithPopup(currentUser, provider);
+        // หลังจากผูกเสร็จ currentUser จะเปลี่ยนจาก Anonymous เป็น Google User โดยที่ UID เดิมไม่เปลี่ยน!
+      } else {
+        // ถ้าไม่ได้เป็น Guest (เช่น เผลอ logout ไปแล้ว) ก็ให้ Login ปกติ
+        await signInWithPopup(auth, provider);
+      }
     } catch (error) {
-      console.error("Google Login Error:", error);
-      if (error.code === 'auth/popup-blocked') {
-        alert("กรุณาอนุญาตให้เปิดหน้าต่าง Pop-up สำหรับไซต์นี้ด้วยนะครับ 🔓");
+      console.error("Link/Login Error:", error);
+      // กรณีบัญชี Google นี้เคยผูกกับ UID อื่นไปแล้ว อาจเกิด error 'auth/credential-already-in-use'
+      // ให้สลับไปใช้การ Login ปกติแทน
+      if (error.code === 'auth/credential-already-in-use') {
+        await signInWithPopup(auth, provider);
       }
     }
   };
