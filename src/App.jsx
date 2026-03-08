@@ -6,6 +6,9 @@ import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, u
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
 
+// 🏷️ รายการหมวดหมู่อาหาร
+const CATEGORIES = ["ทั่วไป", "ต้ม", "ผัด", "แกง", "ทอด", "ของหวาน", "เครื่องดื่ม", "คลีน/สุขภาพ"];
+
 // 🧠 --- AI Helper Functions ---
 function getTermFrequency(text) {
   if (!text) return {};
@@ -41,8 +44,8 @@ function App() {
   const [isCreating, setIsCreating] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState("all");
+  const [activeCategory, setActiveCategory] = useState("ทั้งหมด"); // 🏷️ State สำหรับกรองหมวดหมู่
 
-  // 👤 State สำหรับ Profile Menu
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -50,13 +53,13 @@ function App() {
   const [profileImageFile, setProfileImageFile] = useState(null); 
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  // 💬 State สำหรับคอมเมนต์
   const [commentText, setCommentText] = useState("");
 
-  // 📸 ข้อมูลฟอร์มสร้างสูตร (อัปเกรดเป็น Array รองรับหลายรูป)
-  const [formData, setFormData] = useState({ title: '', ingredients: '', instructions: '', isPublic: true });
-  const [imageFiles, setImageFiles] = useState([]); // เก็บไฟล์หลายไฟล์
-  const [imagePreviews, setImagePreviews] = useState([]); // เก็บ Preview หลายรูป
+  // ✏️ State สำหรับฟอร์มและโหมดแก้ไข
+  const [editingId, setEditingId] = useState(null); 
+  const [formData, setFormData] = useState({ title: '', category: 'ทั่วไป', ingredients: '', instructions: '', isPublic: true });
+  const [imageFiles, setImageFiles] = useState([]); 
+  const [imagePreviews, setImagePreviews] = useState([]); 
   const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
@@ -65,15 +68,16 @@ function App() {
       const recipesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecipes(recipesData);
       
-      // อัปเดตข้อมูลสูตรที่กำลังเปิดดูอยู่ (เพื่อให้คอมเมนต์และไลก์เด้ง Real-time)
       if (selectedRecipe) {
         const updatedActive = recipesData.find(r => r.id === selectedRecipe.id);
         if (updatedActive) setSelectedRecipe(updatedActive);
+        else setSelectedRecipe(null); // ปิด popup ถ้าสูตรถูกลบ
       }
     });
     return () => unsubscribe(); 
   }, [selectedRecipe?.id]);
 
+  // ฟังก์ชัน Profile
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -94,9 +98,7 @@ function App() {
         imgData.append("image", profileImageFile);
         const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imgData });
         const data = await res.json();
-        if (data.success) {
-          finalPhotoURL = data.data.url;
-        }
+        if (data.success) finalPhotoURL = data.data.url;
       }
       await updateProfile(auth.currentUser, { displayName: newDisplayName, photoURL: finalPhotoURL });
       alert("อัปเดตโปรไฟล์สำเร็จ! ✨");
@@ -109,7 +111,7 @@ function App() {
     } finally { setIsUpdatingProfile(false); }
   };
 
-  // 📸 ฟังก์ชันเลือกหลายรูปภาพ
+  // ฟังก์ชันอัปโหลดรูป
   const handleImagesChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
@@ -120,51 +122,91 @@ function App() {
   };
 
   const removeImage = (index) => {
+    // ลบรูปภาพที่ผู้ใช้เลือกออกจากคิวเตรียมอัปโหลด
     setImageFiles(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
+  // ✏️ เปิดโหมดแก้ไข
+  const handleEditClick = (recipe) => {
+    setEditingId(recipe.id);
+    setFormData({
+      title: recipe.title,
+      category: recipe.category || "ทั่วไป",
+      ingredients: recipe.ingredients,
+      instructions: recipe.instructions,
+      isPublic: recipe.isPublic !== false
+    });
+    // เอารูปเดิมมาโชว์เป็น Preview ไว้ก่อน
+    setImagePreviews(recipe.images?.length > 0 ? recipe.images : [recipe.image]);
+    setImageFiles([]); // รีเซ็ตไฟล์ใหม่
+    setSelectedRecipe(null); // ปิดหน้าต่างดูสูตร
+    setIsCreating(true); // เปิดหน้าต่างฟอร์ม
+  };
+
+  // 💾 บันทึกสูตร (รองรับทั้ง สร้างใหม่ และ แก้ไข)
   const handleSubmitRecipe = async (e) => {
     e.preventDefault(); 
-    if (!formData.title || imageFiles.length === 0) return alert("กรุณากรอกชื่อเมนูและเลือกรูปภาพอย่างน้อย 1 รูปนะครับ 📸");
+    if (!formData.title) return alert("กรุณากรอกชื่อเมนูด้วยนะครับ 🍳");
+    if (!editingId && imageFiles.length === 0) return alert("กรุณาเลือกรูปภาพอย่างน้อย 1 รูปนะครับ 📸");
     
     setIsUploading(true);
     try {
-      // อัปโหลดรูปภาพทั้งหมดด้วยการวนลูป
-      const imageUrls = [];
-      for (const file of imageFiles) {
-        const imageFormData = new FormData();
-        imageFormData.append("image", file);
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imageFormData });
-        const data = await res.json();
-        if (data.success) imageUrls.push(data.data.url);
+      let imageUrls = [];
+      
+      // 1. ถ้ามีการเลือกรูปใหม่ ให้อัปโหลด
+      if (imageFiles.length > 0) {
+        for (const file of imageFiles) {
+          const imageFormData = new FormData();
+          imageFormData.append("image", file);
+          const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imageFormData });
+          const data = await res.json();
+          if (data.success) imageUrls.push(data.data.url);
+        }
+      } else if (editingId) {
+        // 2. ถ้าเป็นการแก้ไข แต่ไม่ได้เลือกรูปใหม่ ให้ใช้รูปเดิม
+        const recipeToEdit = recipes.find(r => r.id === editingId);
+        imageUrls = recipeToEdit.images?.length > 0 ? recipeToEdit.images : [recipeToEdit.image];
       }
 
-      // 🛑 ล็อกสิทธิ์ Guest: ถ้าเป็น Guest ให้เป็น Private เสมอ
       const isGuest = currentUser?.isAnonymous;
       const finalIsPublic = isGuest ? false : formData.isPublic;
 
-      await addDoc(collection(db, "recipes"), {
+      const recipeData = {
         title: formData.title,
-        images: imageUrls, // เก็บเป็น Array สำหรับหลายรูป
-        image: imageUrls[0], // เก็บภาพแรกไว้โชว์หน้าปก (สำรอง)
+        category: formData.category, // บันทึกหมวดหมู่
+        images: imageUrls,
+        image: imageUrls[0], 
         ingredients: formData.ingredients,
         instructions: formData.instructions,
         isPublic: finalIsPublic,
-        author: isGuest ? "เชฟนิรนาม (Guest)" : (currentUser?.displayName || "เชฟนิรนาม"), 
-        authorId: currentUser?.uid,
-        likedBy: [], 
-        comments: [], // เตรียมพื้นที่สำหรับคอมเมนต์
-        createdAt: serverTimestamp() 
-      });
+      };
 
-      alert("🎉 บันทึกสูตรอาหารสำเร็จ!");
+      if (editingId) {
+        // ✏️ อัปเดตข้อมูลเดิม
+        await updateDoc(doc(db, "recipes", editingId), recipeData);
+        alert("📝 บันทึกการแก้ไขสำเร็จ!");
+      } else {
+        // 🆕 สร้างสูตรใหม่
+        await addDoc(collection(db, "recipes"), {
+          ...recipeData,
+          author: isGuest ? "เชฟนิรนาม (Guest)" : (currentUser?.displayName || "เชฟนิรนาม"), 
+          authorId: currentUser?.uid,
+          likedBy: [], 
+          comments: [],
+          createdAt: serverTimestamp() 
+        });
+        alert("🎉 สร้างสูตรอาหารสำเร็จ!");
+      }
+
       setIsCreating(false); 
-      setFormData({ title: '', ingredients: '', instructions: '', isPublic: true }); 
+      setEditingId(null);
+      setFormData({ title: '', category: 'ทั่วไป', ingredients: '', instructions: '', isPublic: true }); 
       setImageFiles([]);
       setImagePreviews([]);
     } catch (error) { 
       console.error(error); 
+      alert("เกิดข้อผิดพลาดในการบันทึกครับ");
     } finally { 
       setIsUploading(false); 
     }
@@ -189,10 +231,9 @@ function App() {
     }
   };
 
-  // 💬 ฟังก์ชันส่งคอมเมนต์
   const handleAddComment = async (e, recipeId) => {
     e.preventDefault();
-    if (!commentText.trim() || currentUser?.isAnonymous) return; // Guest โดนดักตรงนี้ด้วย
+    if (!commentText.trim() || currentUser?.isAnonymous) return;
     
     try {
       const recipeRef = doc(db, "recipes", recipeId);
@@ -206,33 +247,39 @@ function App() {
           createdAt: new Date()
         })
       });
-      setCommentText(""); // ล้างกล่องข้อความ
+      setCommentText("");
     } catch (error) {
       console.error("Comment error:", error);
     }
   };
 
-  // 🔍 กรองสูตรอาหาร
+  // 🔍 กรองสูตรอาหาร (Tabs + หมวดหมู่ + Search)
   const filteredRecipes = recipes.filter(r => {
     const isOwner = currentUser && r.authorId === currentUser.uid;
     const isPublic = r.isPublic !== false;
     
+    // 1. กรอง Tab (ฟีดรวม, ของฉัน, ถูกใจ)
     let passesTab = false;
     if (filterTab === "all") passesTab = isPublic;
     else if (filterTab === "my_recipes") passesTab = isOwner;
     else if (filterTab === "liked") passesTab = currentUser && r.likedBy?.includes(currentUser.uid) && (isPublic || isOwner);
 
+    // 2. กรองหมวดหมู่
+    const passesCategory = activeCategory === "ทั้งหมด" || r.category === activeCategory;
+
+    // 3. กรองคำค้นหา
     const searchLower = searchQuery.toLowerCase();
     const matchSearch = r.title?.toLowerCase().includes(searchLower) || r.ingredients?.toLowerCase().includes(searchLower);
 
-    return passesTab && matchSearch;
+    return passesTab && passesCategory && matchSearch;
   });
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans relative">
+    <div className="min-h-screen bg-gray-50 font-sans relative pb-20">
+      {/* --- Top Navbar --- */}
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-          <h1 className="text-3xl font-extrabold text-orange-500 cursor-pointer" onClick={() => setFilterTab("all")}>Pinto</h1>
+          <h1 className="text-3xl font-extrabold text-orange-500 cursor-pointer" onClick={() => { setFilterTab("all"); setActiveCategory("ทั้งหมด"); }}>Pinto</h1>
           <div className="flex-1 max-w-xl mx-8 hidden sm:block">
             <div className="relative">
               <input type="text" placeholder="ค้นหาสูตร หรือส่วนผสม..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-100 rounded-full py-2 px-5 outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
@@ -241,7 +288,7 @@ function App() {
           </div>
 
           <div className="flex items-center space-x-4">
-            <button onClick={() => setIsCreating(true)} className="bg-orange-500 text-white px-5 py-2 rounded-full font-medium shadow-sm hover:bg-orange-600 transition-colors">+ สร้างสูตร</button>
+            <button onClick={() => { setEditingId(null); setFormData({ title: '', category: 'ทั่วไป', ingredients: '', instructions: '', isPublic: true }); setImageFiles([]); setImagePreviews([]); setIsCreating(true); }} className="bg-orange-500 text-white px-5 py-2 rounded-full font-medium shadow-sm hover:bg-orange-600 transition-colors">+ สร้างสูตร</button>
             
             {currentUser?.isAnonymous ? (
               <button onClick={loginWithGoogle} className="flex items-center space-x-2 bg-white border border-gray-200 px-4 py-2 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-50 transition-all shadow-sm">
@@ -274,10 +321,30 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex space-x-3 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setFilterTab('all')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${filterTab === 'all' ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🌐 ฟีดรวม</button>
-          <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🍳 สูตรของฉัน</button>
-          <button onClick={() => setFilterTab('liked')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all ${filterTab === 'liked' ? 'bg-red-500 text-white border-red-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>❤️ ที่ถูกใจ</button>
+        {/* แท็บหลัก */}
+        <div className="flex space-x-3 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+          <button onClick={() => setFilterTab('all')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'all' ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🌐 ฟีดรวม</button>
+          <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🍳 สูตรของฉัน</button>
+          <button onClick={() => setFilterTab('liked')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'liked' ? 'bg-red-500 text-white border-red-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>❤️ ที่ถูกใจ</button>
+        </div>
+
+        {/* 🏷️ แถบตัวกรองหมวดหมู่ */}
+        <div className="flex space-x-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+          <button 
+            onClick={() => setActiveCategory("ทั้งหมด")} 
+            className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}
+          >
+            ทั้งหมด
+          </button>
+          {CATEGORIES.map(cat => (
+            <button 
+              key={cat} 
+              onClick={() => setActiveCategory(cat)} 
+              className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}
+            >
+              {cat}
+            </button>
+          ))}
         </div>
 
         {filteredRecipes.length === 0 ? (
@@ -289,12 +356,16 @@ function App() {
             {filteredRecipes.map((recipe) => (
               <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 relative group cursor-pointer hover:shadow-md transition-shadow">
                 {recipe.isPublic === false && <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full z-10 backdrop-blur-sm">🔒 ส่วนตัว</div>}
+                
                 <div className="w-full bg-gray-200 overflow-hidden relative aspect-square">
-                   {/* 🖼️ ใช้ aspect-square + object-cover จัดการรูปให้เป็นสี่เหลี่ยมจัตุรัสแบบไม่เบี้ยว */}
                    <img src={recipe.image || recipe.images?.[0]} alt={recipe.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                   {currentUser?.uid === recipe.authorId && (
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="absolute top-2 right-2 bg-black/40 hover:bg-red-500 text-white p-1.5 rounded-full transition-colors backdrop-blur-sm opacity-0 group-hover:opacity-100" title="ลบสูตรนี้">🗑️</button>
-                    )}
+                   
+                   {/* 🏷️ ป้ายหมวดหมู่บนรูป */}
+                   {recipe.category && (
+                     <div className="absolute bottom-2 left-2 bg-white/90 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-lg backdrop-blur-sm shadow-sm">
+                       {recipe.category}
+                     </div>
+                   )}
                 </div>
                 <div className="p-4">
                   <h3 className="font-bold text-gray-800 line-clamp-2">{recipe.title}</h3>
@@ -318,51 +389,20 @@ function App() {
         )}
       </main>
 
-      {/* --- Modal แก้ไขโปรไฟล์ (คงเดิม) --- */}
-      {isEditingProfile && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl w-full max-w-md p-8 relative shadow-2xl">
-            <button onClick={() => setIsEditingProfile(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl">✕</button>
-            <h2 className="text-2xl font-extrabold text-gray-800 mb-6 text-center">📝 แก้ไขโปรไฟล์</h2>
-            <form onSubmit={handleUpdateProfile} className="space-y-6">
-              <div className="flex flex-col items-center">
-                <div className="w-28 h-28 rounded-full border-4 border-orange-100 overflow-hidden bg-gray-50 mb-4 shadow-inner">
-                  <img src={newPhotoURL || currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} alt="Preview" className="w-full h-full object-cover" />
-                </div>
-                <label className="cursor-pointer bg-orange-50 text-orange-600 px-4 py-2 rounded-full text-xs font-bold hover:bg-orange-100 transition-colors border border-orange-200">
-                  📸 เปลี่ยนรูปโปรไฟล์
-                  <input type="file" accept="image/*" onChange={handleProfileImageChange} className="hidden" />
-                </label>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2 ml-1">ชื่อที่แสดงผล</label>
-                <input type="text" value={newDisplayName} onChange={(e) => setNewDisplayName(e.target.value)} className="w-full border-2 border-gray-100 bg-gray-50 rounded-2xl py-3 px-4 outline-none focus:border-orange-300" placeholder="ใส่ชื่อเชฟของคุณ..." />
-              </div>
-              <div className="pt-4 flex space-x-3">
-                <button type="button" onClick={() => setIsEditingProfile(false)} className="flex-1 py-3 font-bold text-gray-400 hover:bg-gray-100 rounded-2xl transition-colors">ยกเลิก</button>
-                <button type="submit" disabled={isUpdatingProfile} className="flex-2 bg-orange-500 text-white py-3 px-8 rounded-2xl font-bold hover:bg-orange-600 disabled:opacity-50 transition-all shadow-md shadow-orange-200">
-                  {isUpdatingProfile ? "⏳ กำลังบันทึก..." : "✅ บันทึกโปรไฟล์"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* --- Modal สร้างสูตร (ระบบอัปโหลดหลายรูป + ฟิกซ์ขนาด) --- */}
+      {/* --- Modal สร้าง/แก้ไขสูตร --- */}
       {isCreating && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-xl p-6 relative shadow-2xl overflow-y-auto max-h-[90vh]">
             <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
-            <h2 className="text-xl font-bold mb-6">จดสูตรอาหารใหม่ ✍️</h2>
+            <h2 className="text-xl font-bold mb-6">{editingId ? "📝 แก้ไขสูตรอาหาร" : "จดสูตรอาหารใหม่ ✍️"}</h2>
             <form onSubmit={handleSubmitRecipe} className="space-y-4">
               
-              {/* 🖼️ แสดงภาพตัวอย่าง (เรียงเป็นกริด + สี่เหลี่ยมจัตุรัสเป๊ะๆ) */}
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
                     <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200">
                       <img src={preview} className="w-full h-full object-cover" />
+                      {/* ยอมให้ลบเฉพาะตอนเป็นไฟล์ใหม่ (เพื่อความง่ายในการจัดเก็บ) หรือถ้าเป็นโหมดแก้ไข ถ้ารูปโดนเคลียร์ต้องอัปโหลดใหม่หมด */}
                       <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
                     </div>
                   ))}
@@ -371,9 +411,8 @@ function App() {
 
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2 flex justify-between items-end">
-                  <span>รูปภาพอาหาร <span className="text-gray-400 text-xs font-normal">(เลือกได้หลายรูป)</span></span>
+                  <span>รูปภาพอาหาร {editingId && <span className="text-orange-500 text-xs">(หากเลือกรูปใหม่ รูปเดิมจะถูกแทนที่)</span>}</span>
                 </label>
-                {/* ปุ่มอัปโหลดหลายรูป */}
                 <input type="file" multiple accept="image/*" onChange={handleImagesChange} className="w-full text-sm border p-2 rounded-xl bg-gray-50" />
               </div>
 
@@ -381,6 +420,17 @@ function App() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label>
                 <input type="text" placeholder="เช่น กะเพราหมูสับ" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" />
               </div>
+
+              {/* 🏷️ กล่องเลือกหมวดหมู่ */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">หมวดหมู่</label>
+                <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 bg-white">
+                  {CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label>
                 <textarea placeholder="หมูสับ, ใบกะเพรา..." value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="2"></textarea>
@@ -390,7 +440,6 @@ function App() {
                 <textarea placeholder="1. ตั้งกระทะ..." value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="3"></textarea>
               </div>
               
-              {/* 🔒 ล็อกสิทธิ์ Guest ไม่ให้เปิด Public */}
               <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300">
                 <div>
                   <p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p>
@@ -406,20 +455,19 @@ function App() {
               </div>
               
               <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2 shadow-md">
-                {isUploading ? "⏳ กำลังอัปโหลดรูปภาพและบันทึกสูตร..." : "✅ บันทึกสูตรอาหาร"}
+                {isUploading ? "⏳ กำลังบันทึก..." : (editingId ? "✅ บันทึกการแก้ไข" : "✅ บันทึกสูตรอาหาร")}
               </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* --- Modal ดูสูตร (พร้อมรูปภาพหลายรูป & ระบบคอมเมนต์) --- */}
+      {/* --- Modal ดูสูตร --- */}
       {selectedRecipe && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-0 relative shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedRecipe(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
             
-            {/* 🖼️ แกลอรี่รูปภาพ เลื่อนดูแนวนอนได้ */}
             <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
               {(selectedRecipe.images?.length > 0 ? selectedRecipe.images : [selectedRecipe.image]).map((img, i) => (
                 <img key={i} src={img} className="w-full h-72 object-cover flex-shrink-0 snap-center" />
@@ -429,13 +477,24 @@ function App() {
             <div className="p-8">
               <div className="flex justify-between items-start mb-6">
                 <div>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-1 rounded-lg">{selectedRecipe.category || "ทั่วไป"}</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded-lg text-xs font-bold">{selectedRecipe.isPublic !== false ? "🌍 สาธารณะ" : "🔒 ส่วนตัว"}</span>
+                  </div>
                   <h2 className="text-3xl font-extrabold text-gray-800">{selectedRecipe.title}</h2>
                   <p className="text-sm text-gray-500 mt-2 flex items-center">
                     <span className="mr-3">👨‍🍳 โดย {selectedRecipe.author}</span>
-                    <span className="bg-gray-100 px-2 py-1 rounded-md text-xs font-bold">{selectedRecipe.isPublic !== false ? "🌍 สาธารณะ" : "🔒 ส่วนตัว"}</span>
                   </p>
                 </div>
-                <div className="flex items-center space-x-2">
+                
+                {/* ✏️ ปุ่มแก้ไข & ลบ โชว์เฉพาะเจ้าของสูตร */}
+                <div className="flex flex-col space-y-2 items-end">
+                  {currentUser?.uid === selectedRecipe.authorId && (
+                    <div className="flex space-x-2">
+                      <button onClick={() => handleEditClick(selectedRecipe)} className="text-gray-600 text-sm font-bold bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition-colors">✏️ แก้ไข</button>
+                      <button onClick={() => { if(window.confirm("ลบสูตรนี้ใช่ไหม?")) { deleteDoc(doc(db, "recipes", selectedRecipe.id)); setSelectedRecipe(null); }}} className="text-red-500 text-sm font-bold bg-red-50 px-4 py-2 rounded-full hover:bg-red-100 transition-colors">🗑️ ลบ</button>
+                    </div>
+                  )}
                   <button onClick={(e) => handleLike(e, selectedRecipe)} className={`flex items-center space-x-1 px-4 py-2 rounded-full font-bold transition-colors ${selectedRecipe.likedBy?.includes(currentUser?.uid) ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500 hover:bg-red-50 hover:text-red-500'}`}>
                     <span>{selectedRecipe.likedBy?.includes(currentUser?.uid) ? '❤️' : '🤍'}</span>
                     <span>{selectedRecipe.likedBy?.length || 0}</span>
@@ -452,24 +511,17 @@ function App() {
                 <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedRecipe.instructions}</p>
               </div>
 
-              {/* 💬 --- ระบบคอมเมนต์ --- */}
+              {/* 💬 คอมเมนต์ (โค้ดเดิม) */}
               <div className="border-t border-gray-100 pt-8">
                 <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg">
                   <span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})
                 </h3>
                 
-                {/* 📝 กล่องพิมพ์คอมเมนต์ (ซ่อนถ้าเป็น Guest) */}
                 {!currentUser?.isAnonymous ? (
                   <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
                     <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
                     <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-                      <input 
-                        type="text" 
-                        value={commentText}
-                        onChange={(e) => setCommentText(e.target.value)}
-                        placeholder="เพิ่มความคิดเห็น..." 
-                        className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" 
-                      />
+                      <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
                       <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
                     </div>
                   </form>
@@ -479,7 +531,6 @@ function App() {
                   </div>
                 )}
 
-                {/* 📜 รายการคอมเมนต์ */}
                 <div className="space-y-4">
                   {selectedRecipe.comments?.slice().reverse().map((c) => (
                     <div key={c.id} className="flex space-x-3">
@@ -495,7 +546,6 @@ function App() {
                   )}
                 </div>
               </div>
-
             </div>
           </div>
         </div>
