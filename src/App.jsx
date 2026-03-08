@@ -189,11 +189,11 @@ function App() {
                   </button>
                 ) : (
                   <img 
-  src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} 
-  alt="P" 
-  onClick={logout} 
-  className="w-10 h-10 rounded-full border-2 border-orange-200 cursor-pointer object-cover" 
-/>
+                      src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} 
+                      alt="P" 
+                      onClick={logout} 
+                      className="w-10 h-10 rounded-full border-2 border-orange-200 cursor-pointer object-cover" 
+                    />
                 )}
               </div>
             </div>
