@@ -1,7 +1,8 @@
 // src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth } from '../firebase';
-import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+// นำเข้า signInWithRedirect เข้ามาแทน
+import { onAuthStateChanged, signInAnonymously, GoogleAuthProvider, signInWithRedirect, signOut } from 'firebase/auth';
 
 // 1. สร้าง Context (กระบอกเสียง)
 const AuthContext = createContext();
@@ -18,7 +19,8 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      // 👇 เปลี่ยนจาก Popup เป็น Redirect
+      await signInWithRedirect(auth, provider); 
     } catch (error) {
       console.error("เกิดข้อผิดพลาดตอนล็อกอิน Google:", error);
     }
