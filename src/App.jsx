@@ -48,8 +48,8 @@ function App() {
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const [recipeLimit, setRecipeLimit] = useState(12); // โหลดครั้งแรก 12 เมนู
-  const [hasMore, setHasMore] = useState(true); // เช็คว่ามีข้อมูลให้โหลดอีกไหม
+  const [recipeLimit, setRecipeLimit] = useState(16); // โหลดครั้งแรก 16 เมนู
+  const [hasMore, setHasMore] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -87,6 +87,27 @@ useEffect(() => {
     });
     return () => unsubscribe(); 
   }, [selectedRecipe?.id, recipeLimit]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // ตรวจสอบว่าเลื่อนจอมาเหลือระยะประมาณ 800px (ประมาณ 2-3 แถว) ก่อนถึงล่างสุดหรือยัง
+      if (
+        window.innerHeight + document.documentElement.scrollTop >=
+        document.documentElement.offsetHeight - 800
+      ) {
+        // ถ้าถึงแล้ว + ยังมีข้อมูลให้โหลด + ไม่ได้กำลังโหลดอยู่ ให้ดึงมาเพิ่มอีก 16 อัน
+        if (hasMore && !isLoadingData) {
+          setRecipeLimit((prev) => prev + 16);
+        }
+      }
+    };
+
+    // เปิดเรดาร์จับการเลื่อน
+    window.addEventListener('scroll', handleScroll);
+    
+    // ปิดเรดาร์เมื่อไม่ได้อยู่หน้านี้ (ป้องกันเมมโมรี่รั่ว)
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasMore, isLoadingData]);
 
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
@@ -347,16 +368,11 @@ useEffect(() => {
             ))}
           </div>
         )}
-        {/* 👇 เพิ่มปุ่มนี้เข้าไปก่อนปิดแท็ก </main> */}
-        {hasMore && !isLoadingData && filteredRecipes.length > 0 && (
-          <div className="flex justify-center mt-12 mb-4">
-            <button 
-              onClick={() => setRecipeLimit(prev => prev + 12)} 
-              className="bg-white text-orange-500 border-2 border-orange-200 px-8 py-3 rounded-full font-bold hover:bg-orange-50 hover:border-orange-300 transition-all shadow-sm flex items-center space-x-2"
-            >
-              <span className="text-xl">👇</span>
-              <span>โหลดเมนูเพิ่มเติม</span>
-            </button>
+{/* 👇 เปลี่ยนจากปุ่มกด เป็นไอคอน Loading หมุนๆ เนียนๆ */}
+        {hasMore && filteredRecipes.length > 0 && (
+          <div className="flex justify-center items-center mt-12 mb-8 space-x-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
+            <span className="text-gray-400 text-sm font-bold">กำลังโหลดเมนูอร่อยๆ เพิ่ม...</span>
           </div>
         )}
       </main>
