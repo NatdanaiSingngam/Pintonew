@@ -3,13 +3,13 @@ import { useAuth } from './contexts/AuthContext';
 import { db, auth } from './firebase'; 
 import { updateProfile } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+// 👇 1. Import Toast เข้ามา
+import toast, { Toaster } from 'react-hot-toast';
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
 
-// 🏷️ รายการหมวดหมู่อาหาร
 const CATEGORIES = ["ทั่วไป", "ต้ม", "ผัด", "แกง", "ทอด", "ของหวาน", "เครื่องดื่ม", "คลีน/สุขภาพ"];
 
-// 🧠 --- AI Helper Functions ---
 function getTermFrequency(text) {
   if (!text) return {};
   const words = text.split(/[\s,]+/).filter(w => w.trim() !== '');
@@ -76,7 +76,6 @@ function App() {
     return () => unsubscribe(); 
   }, [selectedRecipe?.id]);
 
-  // ฟังก์ชัน Profile
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -87,7 +86,10 @@ function App() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (!newDisplayName.trim()) return alert("กรุณากรอกชื่อด้วยครับ");
+    if (!newDisplayName.trim()) {
+      toast.error("กรุณากรอกชื่อด้วยครับ"); // 🔔 เปลี่ยนเป็น Toast
+      return;
+    }
     setIsUpdatingProfile(true);
     let finalPhotoURL = currentUser.photoURL;
 
@@ -100,13 +102,15 @@ function App() {
         if (data.success) finalPhotoURL = data.data.url;
       }
       await updateProfile(auth.currentUser, { displayName: newDisplayName, photoURL: finalPhotoURL });
-      alert("อัปเดตโปรไฟล์สำเร็จ! ✨");
+      
+      toast.success("อัปเดตโปรไฟล์สำเร็จ! ✨"); // 🔔 เปลี่ยนเป็น Toast
       setIsEditingProfile(false);
       setShowProfileMenu(false);
-      window.location.reload(); 
+      // รีเฟรชหลังแจ้งเตือนเสร็จ
+      setTimeout(() => window.location.reload(), 1500); 
     } catch (error) {
       console.error(error);
-      alert("เกิดข้อผิดพลาดในการบันทึกโปรไฟล์");
+      toast.error("เกิดข้อผิดพลาดในการบันทึกโปรไฟล์");
     } finally { setIsUpdatingProfile(false); }
   };
 
@@ -141,10 +145,13 @@ function App() {
 
   const handleSubmitRecipe = async (e) => {
     e.preventDefault(); 
-    if (!formData.title) return alert("กรุณากรอกชื่อเมนูด้วยนะครับ 🍳");
-    if (!editingId && imageFiles.length === 0) return alert("กรุณาเลือกรูปภาพอย่างน้อย 1 รูปนะครับ 📸");
+    if (!formData.title) return toast.error("กรุณากรอกชื่อเมนูด้วยนะครับ 🍳");
+    if (!editingId && imageFiles.length === 0) return toast.error("กรุณาเลือกรูปภาพอย่างน้อย 1 รูปนะครับ 📸");
     
+    // Toast แบบโหลด
+    const loadingToast = toast.loading(editingId ? "กำลังบันทึกการแก้ไข..." : "กำลังอัปโหลดและบันทึกสูตร...");
     setIsUploading(true);
+    
     try {
       let imageUrls = [];
       
@@ -176,7 +183,7 @@ function App() {
 
       if (editingId) {
         await updateDoc(doc(db, "recipes", editingId), recipeData);
-        alert("📝 บันทึกการแก้ไขสำเร็จ!");
+        toast.success("บันทึกการแก้ไขสำเร็จ! 📝", { id: loadingToast });
       } else {
         await addDoc(collection(db, "recipes"), {
           ...recipeData,
@@ -186,7 +193,7 @@ function App() {
           comments: [],
           createdAt: serverTimestamp() 
         });
-        alert("🎉 สร้างสูตรอาหารสำเร็จ!");
+        toast.success("สร้างสูตรอาหารสำเร็จ! 🎉", { id: loadingToast });
       }
 
       setIsCreating(false); 
@@ -196,7 +203,7 @@ function App() {
       setImagePreviews([]);
     } catch (error) { 
       console.error(error); 
-      alert("เกิดข้อผิดพลาดในการบันทึกครับ");
+      toast.error("เกิดข้อผิดพลาดในการบันทึกครับ", { id: loadingToast });
     } finally { 
       setIsUploading(false); 
     }
@@ -204,7 +211,10 @@ function App() {
 
   const handleLike = async (e, recipe) => {
     e.stopPropagation();
-    if (!currentUser?.uid) return;
+    if (!currentUser?.uid) {
+      toast.error("ต้องล็อกอินก่อนถึงจะกดไลก์ได้น้า ❤️");
+      return;
+    }
     const recipeRef = doc(db, "recipes", recipe.id);
     const hasLiked = recipe.likedBy?.includes(currentUser.uid);
     await updateDoc(recipeRef, {
@@ -213,11 +223,16 @@ function App() {
   };
 
   const handleDeleteRecipe = async (recipeId) => {
+    // window.confirm ยังคงใช้ดีสำหรับการยืนยันการลบที่ต้องคิดก่อนกดครับ
     if (window.confirm("แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺")) {
       try {
         await deleteDoc(doc(db, "recipes", recipeId));
         setSelectedRecipe(null); 
-      } catch (error) { console.error("Error deleting document: ", error); }
+        toast.success("ลบสูตรอาหารเรียบร้อยแล้ว 🗑️");
+      } catch (error) { 
+        console.error("Error deleting document: ", error); 
+        toast.error("ลบข้อมูลไม่สำเร็จ");
+      }
     }
   };
 
@@ -238,17 +253,18 @@ function App() {
         })
       });
       setCommentText("");
+      toast.success("ส่งความคิดเห็นแล้ว 💬");
     } catch (error) {
       console.error("Comment error:", error);
+      toast.error("ส่งความคิดเห็นไม่สำเร็จ");
     }
   };
 
-  // 🔗 ฟังก์ชันแชร์สูตรอาหาร (Web Share API)
   const handleShare = async (recipe) => {
     const shareData = {
       title: `Pinto 🍱: ${recipe.title}`,
       text: `มาดูสูตร "${recipe.title}" น่ากินมากเลย! ลองเข้ามาดูสิ 👨‍🍳✨`,
-      url: window.location.href // แชร์ URL ปัจจุบันของหน้าเว็บ
+      url: window.location.href 
     };
 
     if (navigator.share) {
@@ -258,9 +274,8 @@ function App() {
         console.error("Share failed:", error);
       }
     } else {
-      // ถ้าเปิดในคอมที่เบราว์เซอร์ไม่รองรับ ให้ใช้วิธีก๊อปปี้ลิงก์แทน
       navigator.clipboard.writeText(`${shareData.text} \nลิงก์: ${shareData.url}`);
-      alert("📋 คัดลอกข้อความและลิงก์สำหรับแชร์เรียบร้อยแล้ว! นำไปวางส่งให้เพื่อนได้เลย");
+      toast.success("คัดลอกลิงก์สำหรับแชร์เรียบร้อยแล้ว! 📋");
     }
   };
 
@@ -282,6 +297,15 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative pb-20">
+      {/* 👇 2. วาง Toaster ไว้ตรงนี้เพื่อให้มันโชว์ป๊อปอัปได้ */}
+      <Toaster 
+        position="bottom-center"
+        toastOptions={{
+          duration: 3000,
+          style: { background: '#333', color: '#fff', borderRadius: '100px', padding: '12px 24px' }
+        }} 
+      />
+
       {/* --- Top Navbar --- */}
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
@@ -315,7 +339,7 @@ function App() {
                     <button onClick={() => { setNewDisplayName(currentUser?.displayName || ""); setNewPhotoURL(currentUser?.photoURL || ""); setIsEditingProfile(true); setShowProfileMenu(false); }} className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 flex items-center transition-colors">
                       <span className="mr-2">📝</span> แก้ไขโปรไฟล์
                     </button>
-                    <button onClick={() => { logout(); setShowProfileMenu(false); }} className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center transition-colors">
+                    <button onClick={() => { logout(); setShowProfileMenu(false); toast.success("ออกจากระบบแล้ว"); }} className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 flex items-center transition-colors">
                       <span className="mr-2">🚪</span> ออกจากระบบ
                     </button>
                   </div>
@@ -475,13 +499,12 @@ function App() {
                 </div>
                 
                 <div className="flex flex-col space-y-2 items-end">
-                  {/* 👇 เพิ่มปุ่มแชร์ตรงนี้ครับ! */}
                   <div className="flex space-x-2">
                     <button onClick={() => handleShare(selectedRecipe)} className="text-blue-600 text-sm font-bold bg-blue-50 px-4 py-2 rounded-full hover:bg-blue-100 transition-colors">📤 แชร์</button>
                     {currentUser?.uid === selectedRecipe.authorId && (
                       <>
                         <button onClick={() => handleEditClick(selectedRecipe)} className="text-gray-600 text-sm font-bold bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition-colors">✏️</button>
-                        <button onClick={() => { if(window.confirm("ลบสูตรนี้ใช่ไหม?")) { deleteDoc(doc(db, "recipes", selectedRecipe.id)); setSelectedRecipe(null); }}} className="text-red-500 text-sm font-bold bg-red-50 px-4 py-2 rounded-full hover:bg-red-100 transition-colors">🗑️</button>
+                        <button onClick={() => handleDeleteRecipe(selectedRecipe.id)} className="text-red-500 text-sm font-bold bg-red-50 px-4 py-2 rounded-full hover:bg-red-100 transition-colors">🗑️</button>
                       </>
                     )}
                   </div>
@@ -539,8 +562,6 @@ function App() {
           </div>
         </div>
       )}
-      
-      {/* Edit Profile Modal (ซ่อนไว้ให้โค้ดสั้นลง แต่มีในโค้ดเต็มด้านบน) */}
     </div>
   );
 }
