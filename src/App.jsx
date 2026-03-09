@@ -3,7 +3,6 @@ import { useAuth } from './contexts/AuthContext';
 import { db, auth } from './firebase'; 
 import { updateProfile } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
-// 👇 1. Import Toast เข้ามา
 import toast, { Toaster } from 'react-hot-toast';
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
@@ -45,6 +44,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterTab, setFilterTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState("ทั้งหมด"); 
+  
+  // 👇 State ใหม่สำหรับเก็บข้อมูลเชฟที่เรากำลังส่องโปรไฟล์อยู่
+  const [viewingProfile, setViewingProfile] = useState(null); 
 
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -86,10 +88,7 @@ function App() {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
-    if (!newDisplayName.trim()) {
-      toast.error("กรุณากรอกชื่อด้วยครับ"); // 🔔 เปลี่ยนเป็น Toast
-      return;
-    }
+    if (!newDisplayName.trim()) return toast.error("กรุณากรอกชื่อด้วยครับ");
     setIsUpdatingProfile(true);
     let finalPhotoURL = currentUser.photoURL;
 
@@ -103,10 +102,9 @@ function App() {
       }
       await updateProfile(auth.currentUser, { displayName: newDisplayName, photoURL: finalPhotoURL });
       
-      toast.success("อัปเดตโปรไฟล์สำเร็จ! ✨"); // 🔔 เปลี่ยนเป็น Toast
+      toast.success("อัปเดตโปรไฟล์สำเร็จ! ✨"); 
       setIsEditingProfile(false);
       setShowProfileMenu(false);
-      // รีเฟรชหลังแจ้งเตือนเสร็จ
       setTimeout(() => window.location.reload(), 1500); 
     } catch (error) {
       console.error(error);
@@ -148,7 +146,6 @@ function App() {
     if (!formData.title) return toast.error("กรุณากรอกชื่อเมนูด้วยนะครับ 🍳");
     if (!editingId && imageFiles.length === 0) return toast.error("กรุณาเลือกรูปภาพอย่างน้อย 1 รูปนะครับ 📸");
     
-    // Toast แบบโหลด
     const loadingToast = toast.loading(editingId ? "กำลังบันทึกการแก้ไข..." : "กำลังอัปโหลดและบันทึกสูตร...");
     setIsUploading(true);
     
@@ -223,7 +220,6 @@ function App() {
   };
 
   const handleDeleteRecipe = async (recipeId) => {
-    // window.confirm ยังคงใช้ดีสำหรับการยืนยันการลบที่ต้องคิดก่อนกดครับ
     if (window.confirm("แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺")) {
       try {
         await deleteDoc(doc(db, "recipes", recipeId));
@@ -268,21 +264,25 @@ function App() {
     };
 
     if (navigator.share) {
-      try {
-        await navigator.share(shareData);
-      } catch (error) {
-        console.error("Share failed:", error);
-      }
+      try { await navigator.share(shareData); } 
+      catch (error) { console.error("Share failed:", error); }
     } else {
       navigator.clipboard.writeText(`${shareData.text} \nลิงก์: ${shareData.url}`);
       toast.success("คัดลอกลิงก์สำหรับแชร์เรียบร้อยแล้ว! 📋");
     }
   };
 
+  // 🔍 กรองข้อมูลสูตร (อัปเดตให้รองรับโหมดส่องโปรไฟล์เชฟ)
   const filteredRecipes = recipes.filter(r => {
     const isOwner = currentUser && r.authorId === currentUser.uid;
     const isPublic = r.isPublic !== false;
     
+    // ถ้ากำลังส่องโปรไฟล์เชฟ ให้ดึงเฉพาะผลงาน Public ของเขาคนนั้น
+    if (viewingProfile) {
+      const matchSearch = r.title?.toLowerCase().includes(searchQuery.toLowerCase()) || r.ingredients?.toLowerCase().includes(searchQuery.toLowerCase());
+      return r.authorId === viewingProfile.uid && isPublic && matchSearch;
+    }
+
     let passesTab = false;
     if (filterTab === "all") passesTab = isPublic;
     else if (filterTab === "my_recipes") passesTab = isOwner;
@@ -297,19 +297,12 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans relative pb-20">
-      {/* 👇 2. วาง Toaster ไว้ตรงนี้เพื่อให้มันโชว์ป๊อปอัปได้ */}
-      <Toaster 
-        position="bottom-center"
-        toastOptions={{
-          duration: 3000,
-          style: { background: '#333', color: '#fff', borderRadius: '100px', padding: '12px 24px' }
-        }} 
-      />
+      <Toaster position="bottom-center" toastOptions={{ duration: 3000, style: { background: '#333', color: '#fff', borderRadius: '100px', padding: '12px 24px' } }} />
 
       {/* --- Top Navbar --- */}
       <nav className="bg-white shadow-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-          <h1 className="text-3xl font-extrabold text-orange-500 cursor-pointer" onClick={() => { setFilterTab("all"); setActiveCategory("ทั้งหมด"); }}>Pinto</h1>
+          <h1 className="text-3xl font-extrabold text-orange-500 cursor-pointer" onClick={() => { setFilterTab("all"); setActiveCategory("ทั้งหมด"); setViewingProfile(null); }}>Pinto</h1>
           <div className="flex-1 max-w-xl mx-8 hidden sm:block">
             <div className="relative">
               <input type="text" placeholder="ค้นหาสูตร หรือส่วนผสม..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-100 rounded-full py-2 px-5 outline-none focus:ring-2 focus:ring-orange-300 transition-all" />
@@ -351,22 +344,45 @@ function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex space-x-3 mb-4 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setFilterTab('all')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'all' ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🌐 ฟีดรวม</button>
-          <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🍳 สูตรของฉัน</button>
-          <button onClick={() => setFilterTab('liked')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'liked' ? 'bg-red-500 text-white border-red-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>❤️ ที่ถูกใจ</button>
-        </div>
+        
+        {/* 👇 ป้ายแบนเนอร์ เมื่อกำลังส่องโปรไฟล์เชฟ */}
+        {viewingProfile ? (
+          <div className="bg-orange-50 p-6 rounded-3xl shadow-sm mb-8 flex flex-col md:flex-row items-center justify-between border border-orange-100 transition-all">
+            <div className="flex items-center space-x-4 mb-4 md:mb-0">
+               <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center text-3xl font-bold text-orange-400 border-4 border-white shadow-sm">
+                 {viewingProfile.name?.[0] || 'U'}
+               </div>
+               <div>
+                 <h2 className="text-2xl font-extrabold text-gray-800">ครัวของ {viewingProfile.name} 👨‍🍳</h2>
+                 <p className="text-sm text-gray-500">ผลงานทั้งหมด {filteredRecipes.length} เมนู</p>
+               </div>
+            </div>
+            <button onClick={() => setViewingProfile(null)} className="bg-white text-orange-500 border border-orange-200 px-5 py-2 rounded-full font-bold text-sm hover:bg-orange-50 transition-colors shadow-sm">
+              ← กลับไปหน้าฟีดรวม
+            </button>
+          </div>
+        ) : (
+          // ถ้าไม่ได้ส่องใครอยู่ ให้โชว์ปุ่มแท็บปกติ
+          <>
+            <div className="flex space-x-3 mb-4 overflow-x-auto pb-2 scrollbar-hide">
+              <button onClick={() => setFilterTab('all')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'all' ? 'bg-gray-800 text-white border-gray-800 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🌐 ฟีดรวม</button>
+              <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🍳 สูตรของฉัน</button>
+              <button onClick={() => setFilterTab('liked')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'liked' ? 'bg-red-500 text-white border-red-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>❤️ ที่ถูกใจ</button>
+            </div>
 
-        <div className="flex space-x-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-          <button onClick={() => setActiveCategory("ทั้งหมด")} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
-          {CATEGORIES.map(cat => (
-            <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>{cat}</button>
-          ))}
-        </div>
+            <div className="flex space-x-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+              <button onClick={() => setActiveCategory("ทั้งหมด")} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
+              {CATEGORIES.map(cat => (
+                <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>{cat}</button>
+              ))}
+            </div>
+          </>
+        )}
 
         {filteredRecipes.length === 0 ? (
           <div className="text-center py-20 text-gray-500">
-             <span className="text-4xl block mb-4">🔍</span>ไม่พบสูตรอาหารในหมวดหมู่นี้ ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!
+             <span className="text-4xl block mb-4">🔍</span>
+             {viewingProfile ? "เชฟคนนี้ยังไม่มีผลงานที่เปิดสาธารณะเลยครับ" : "ไม่พบสูตรอาหารในหมวดหมู่นี้ ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!"}
           </div>
         ) : (
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
@@ -383,10 +399,21 @@ function App() {
                 <div className="p-4">
                   <h3 className="font-bold text-gray-800 line-clamp-2">{recipe.title}</h3>
                   <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
-                    <div className="flex items-center space-x-1">
+                    {/* 👇 ทำให้ชื่อเชฟคลิกได้เพื่อส่องโปรไฟล์ */}
+                    <div 
+                      className="flex items-center space-x-1 p-1 -ml-1 rounded-md hover:bg-orange-50 transition-colors z-20 cursor-pointer"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        setViewingProfile({ uid: recipe.authorId, name: recipe.author }); 
+                        setSelectedRecipe(null); // ปิด popup (ถ้าเปิดอยู่)
+                        window.scrollTo({ top: 0, behavior: 'smooth' }); // เลื่อนจอขึ้นบนสุด
+                      }}
+                      title="คลิกเพื่อดูผลงานของเชฟคนนี้"
+                    >
                       <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center text-[10px] font-bold text-orange-600">{recipe.author?.[0] || 'U'}</div>
-                      <span className="truncate max-w-[80px]">{recipe.author}</span>
+                      <span className="truncate max-w-[80px] hover:text-orange-600 font-medium">{recipe.author}</span>
                     </div>
+                    
                     <div className="flex items-center space-x-2">
                       <span className="text-gray-400">💬 {recipe.comments?.length || 0}</span>
                       <button onClick={(e) => handleLike(e, recipe)} className={`flex items-center space-x-1 px-2 py-1 rounded-full transition-colors ${recipe.likedBy?.includes(currentUser?.uid) ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500'}`}>
@@ -402,14 +429,13 @@ function App() {
         )}
       </main>
 
-      {/* --- Modal สร้าง/แก้ไขสูตร --- */}
+      {/* --- Modal สร้าง/แก้ไขสูตร (เหมือนเดิม) --- */}
       {isCreating && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-xl p-6 relative shadow-2xl overflow-y-auto max-h-[90vh]">
             <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
             <h2 className="text-xl font-bold mb-6">{editingId ? "📝 แก้ไขสูตรอาหาร" : "จดสูตรอาหารใหม่ ✍️"}</h2>
             <form onSubmit={handleSubmitRecipe} className="space-y-4">
-              
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
@@ -420,19 +446,16 @@ function App() {
                   ))}
                 </div>
               )}
-
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-2 flex justify-between items-end">
                   <span>รูปภาพอาหาร {editingId && <span className="text-orange-500 text-xs">(หากเลือกรูปใหม่ รูปเดิมจะถูกแทนที่)</span>}</span>
                 </label>
                 <input type="file" multiple accept="image/*" onChange={handleImagesChange} className="w-full text-sm border p-2 rounded-xl bg-gray-50" />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label>
                 <input type="text" placeholder="เช่น กะเพราหมูสับ" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" />
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">หมวดหมู่</label>
                 <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 bg-white">
@@ -441,7 +464,6 @@ function App() {
                   ))}
                 </select>
               </div>
-
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label>
                 <textarea placeholder="หมูสับ, ใบกะเพรา..." value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="2"></textarea>
@@ -450,7 +472,6 @@ function App() {
                 <label className="block text-sm font-bold text-gray-700 mb-1">วิธีทำ</label>
                 <textarea placeholder="1. ตั้งกระทะ..." value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="3"></textarea>
               </div>
-              
               <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300">
                 <div>
                   <p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p>
@@ -464,7 +485,6 @@ function App() {
                   </div>
                 )}
               </div>
-              
               <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2 shadow-md">
                 {isUploading ? "⏳ กำลังบันทึก..." : (editingId ? "✅ บันทึกการแก้ไข" : "✅ บันทึกสูตรอาหาร")}
               </button>
@@ -493,7 +513,11 @@ function App() {
                     <span className="bg-gray-100 px-2 py-1 rounded-lg text-xs font-bold">{selectedRecipe.isPublic !== false ? "🌍 สาธารณะ" : "🔒 ส่วนตัว"}</span>
                   </div>
                   <h2 className="text-3xl font-extrabold text-gray-800">{selectedRecipe.title}</h2>
-                  <p className="text-sm text-gray-500 mt-2 flex items-center">
+                  {/* 👇 ทำให้ชื่อเชฟใน Modal คลิกส่องโปรไฟล์ได้ด้วย */}
+                  <p 
+                    className="text-sm text-gray-500 mt-2 flex items-center cursor-pointer hover:text-orange-500 transition-colors w-fit"
+                    onClick={() => { setViewingProfile({ uid: selectedRecipe.authorId, name: selectedRecipe.author }); setSelectedRecipe(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  >
                     <span className="mr-3">👨‍🍳 โดย {selectedRecipe.author}</span>
                   </p>
                 </div>
@@ -562,6 +586,8 @@ function App() {
           </div>
         </div>
       )}
+      
+      {/* Edit Profile Modal ซ่อนไว้เหมือนเดิม */}
     </div>
   );
 }
