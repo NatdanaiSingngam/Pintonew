@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { db, auth } from './firebase'; 
 import { updateProfile } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, updateDoc, arrayUnion, arrayRemove, deleteDoc, limit } from 'firebase/firestore';
 import toast, { Toaster } from 'react-hot-toast';
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
@@ -48,6 +48,8 @@ function App() {
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
 
+  const [recipeLimit, setRecipeLimit] = useState(12); // โหลดครั้งแรก 12 เมนู
+  const [hasMore, setHasMore] = useState(true); // เช็คว่ามีข้อมูลให้โหลดอีกไหม
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [newDisplayName, setNewDisplayName] = useState("");
@@ -61,14 +63,21 @@ function App() {
   const [imagePreviews, setImagePreviews] = useState([]); 
   const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => {
-    const q = query(collection(db, "recipes"), orderBy("createdAt", "desc"));
+useEffect(() => {
+    // ใส่ limit(recipeLimit) เข้าไปในคำสั่งดึงข้อมูล
+    const q = query(collection(db, "recipes"), orderBy("createdAt", "desc"), limit(recipeLimit));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const recipesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecipes(recipesData);
-      
-      // 👇 2. พอโหลดข้อมูลเสร็จ ให้ปิดสถานะ Loading
       setIsLoadingData(false);
+      
+      // ถ้าข้อมูลที่ดึงมา น้อยกว่าลิมิตที่ตั้งไว้ แปลว่า "หมดตู้" แล้ว
+      if (recipesData.length < recipeLimit) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
       
       if (selectedRecipe) {
         const updatedActive = recipesData.find(r => r.id === selectedRecipe.id);
@@ -77,7 +86,7 @@ function App() {
       }
     });
     return () => unsubscribe(); 
-  }, [selectedRecipe?.id]);
+  }, [selectedRecipe?.id, recipeLimit]);
 
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
@@ -336,6 +345,18 @@ function App() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+        {/* 👇 เพิ่มปุ่มนี้เข้าไปก่อนปิดแท็ก </main> */}
+        {hasMore && !isLoadingData && filteredRecipes.length > 0 && (
+          <div className="flex justify-center mt-12 mb-4">
+            <button 
+              onClick={() => setRecipeLimit(prev => prev + 12)} 
+              className="bg-white text-orange-500 border-2 border-orange-200 px-8 py-3 rounded-full font-bold hover:bg-orange-50 hover:border-orange-300 transition-all shadow-sm flex items-center space-x-2"
+            >
+              <span className="text-xl">👇</span>
+              <span>โหลดเมนูเพิ่มเติม</span>
+            </button>
           </div>
         )}
       </main>
