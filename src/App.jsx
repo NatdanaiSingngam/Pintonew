@@ -45,7 +45,10 @@ function App() {
   const [filterTab, setFilterTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState("ทั้งหมด"); 
   const [viewingProfile, setViewingProfile] = useState(null); 
-
+  // วาง 3 บรรทัดนี้เข้าไปครับ 👇
+  const dragItem = useRef(); 
+  const dragOverItem = useRef(); 
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
 
