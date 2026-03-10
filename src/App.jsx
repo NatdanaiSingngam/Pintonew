@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// แก้บรรทัดแรกให้เป็นแบบนี้
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { db, auth } from './firebase'; 
 import { updateProfile } from 'firebase/auth';
@@ -147,6 +148,26 @@ useEffect(() => {
   const removeImage = (index) => {
     setImageFiles(prev => prev.filter((_, i) => i !== index));
     setImagePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSortImages = () => {
+    const _imageFiles = [...imageFiles];
+    const _imagePreviews = [...imagePreviews];
+    
+    // ดึงตัวที่ลากออกมา
+    const draggedFile = _imageFiles.splice(dragItem.current, 1)[0];
+    const draggedPreview = _imagePreviews.splice(dragItem.current, 1)[0];
+    
+    // เอาไปแทรกในตำแหน่งใหม่
+    _imageFiles.splice(dragOverItem.current, 0, draggedFile);
+    _imagePreviews.splice(dragOverItem.current, 0, draggedPreview);
+    
+    // เคลียร์ค่า
+    dragItem.current = null;
+    dragOverItem.current = null;
+    
+    setImageFiles(_imageFiles);
+    setImagePreviews(_imagePreviews);
   };
 
   const handleEditClick = (recipe) => {
@@ -384,12 +405,23 @@ useEffect(() => {
             <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
             <h2 className="text-xl font-bold mb-6">{editingId ? "📝 แก้ไขสูตรอาหาร" : "จดสูตรอาหารใหม่ ✍️"}</h2>
             <form onSubmit={handleSubmitRecipe} className="space-y-4">
+              {/* 🖼️ ภาพตัวอย่าง พร้อมระบบลากสลับตำแหน่ง (Drag & Drop) */}
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
-                    <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-gray-200">
-                      <img src={preview} className="w-full h-full object-cover" />
-                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">✕</button>
+                    <div 
+                      key={idx} 
+                      draggable
+                      onDragStart={(e) => (dragItem.current = idx)}
+                      onDragEnter={(e) => (dragOverItem.current = idx)}
+                      onDragEnd={handleSortImages}
+                      onDragOver={(e) => e.preventDefault()}
+                      className="relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-transparent hover:border-orange-400 cursor-move transition-all"
+                      title="คลิกค้างแล้วลากเพื่อสลับตำแหน่ง"
+                    >
+                      <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md z-10">{idx + 1}</div>
+                      <img src={preview} className="w-full h-full object-cover pointer-events-none" />
+                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 z-10 shadow-sm">✕</button>
                     </div>
                   ))}
                 </div>
@@ -424,9 +456,46 @@ useEffect(() => {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-0 relative shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedRecipe(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
-            <div className="flex overflow-x-auto snap-x snap-mandatory scrollbar-hide">
-              {(selectedRecipe.images?.length > 0 ? selectedRecipe.images : [selectedRecipe.image]).map((img, i) => <img key={i} src={img} className="w-full h-72 object-cover flex-shrink-0 snap-center" />)}
-            </div>
+            {/* 🖼️ สไลเดอร์รูปภาพ (Image Slider) */}
+            {(() => {
+              const images = selectedRecipe.images?.length > 0 ? selectedRecipe.images : [selectedRecipe.image];
+              return (
+                <div className="relative w-full h-72 md:h-96 bg-gray-900 flex items-center justify-center group overflow-hidden">
+                  {/* พื้นหลังเบลอๆ ช่วยให้รูปดูมีมิติ */}
+                  <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-xl" style={{ backgroundImage: `url(${images[currentImageIndex]})` }}></div>
+                  
+                  {/* รูปภาพหลัก (ขยายใหญ่ขึ้น ไม่โดนตัด) */}
+                  <img src={images[currentImageIndex]} className="relative max-w-full max-h-full object-contain drop-shadow-2xl transition-all duration-300" />
+                  
+                  {/* ป้ายบอกจำนวนรูป */}
+                  {images.length > 1 && (
+                    <div className="absolute top-4 left-4 bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm z-10 shadow-md">
+                      {currentImageIndex + 1} / {images.length}
+                    </div>
+                  )}
+
+                  {/* ปุ่มเลื่อนซ้าย */}
+                  {images.length > 1 && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length); }} 
+                      className="absolute left-4 w-10 h-10 bg-white/30 hover:bg-white/60 backdrop-blur-md rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 transition-all z-10 shadow-lg"
+                    >
+                      &#10094;
+                    </button>
+                  )}
+
+                  {/* ปุ่มเลื่อนขวา */}
+                  {images.length > 1 && (
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev + 1) % images.length); }} 
+                      className="absolute right-4 w-10 h-10 bg-white/30 hover:bg-white/60 backdrop-blur-md rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 transition-all z-10 shadow-lg"
+                    >
+                      &#10095;
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             <div className="p-8">
               <div className="flex justify-between items-start mb-6">
                 <div>
