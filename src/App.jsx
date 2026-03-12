@@ -49,6 +49,8 @@ function App() {
   const dragItem = useRef(); 
   const dragOverItem = useRef(); 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  // 👇 State สำหรับควบคุมป๊อปอัปแชร์ของเราเอง
+  const [sharingRecipe, setSharingRecipe] = useState(null);
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -133,7 +135,7 @@ useEffect(() => {
       }
     }
   }, [recipes]); // ให้ทำงานทุกครั้งที่ข้อมูลสูตร (recipes) โหลดเสร็จ
-  
+
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
     if (file) { setProfileImageFile(file); setNewPhotoURL(URL.createObjectURL(file)); }
@@ -262,24 +264,9 @@ useEffect(() => {
     } catch (error) { toast.error("ส่งความคิดเห็นไม่สำเร็จ"); }
   };
 
-  const handleShare = async (recipe) => {
-    // 👇 สร้างลิงก์แชร์ โดยเอา URL หน้าเว็บปัจจุบัน + รหัสสูตรอาหาร
-    const shareUrl = `${window.location.origin}${window.location.pathname}?recipeId=${recipe.id}`;
-
-    const shareData = {
-      title: `Pinto 🍱: ${recipe.title}`,
-      text: `มาดูสูตร "${recipe.title}" น่ากินมากเลย! ลองเข้ามาดูสิ 👨‍🍳✨`,
-      url: shareUrl 
-    };
-
-    if (navigator.share) {
-      try { await navigator.share(shareData); } catch (error) { console.error("Share failed:", error); }
-    } else { 
-      navigator.clipboard.writeText(`${shareData.text} \nลิงก์: ${shareData.url}`); 
-      toast.success("คัดลอกลิงก์สำหรับแชร์เรียบร้อยแล้ว! 📋"); 
-    }
+const handleShare = (recipe) => {
+    setSharingRecipe(recipe); // แค่สั่งให้เก็บข้อมูลสูตร แล้วเดี๋ยวป๊อปอัปจะเด้งขึ้นมาเอง
   };
-
   const filteredRecipes = recipes.filter(r => {
     const isOwner = currentUser && r.authorId === currentUser.uid;
     const isPublic = r.isPublic !== false;
@@ -604,5 +591,56 @@ useEffect(() => {
     </div>
   );
 }
+{/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
+      {sharingRecipe && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSharingRecipe(null)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setSharingRecipe(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold">✕</button>
+            
+            <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">📤 แชร์สูตรอาหาร</h3>
+            <p className="text-sm text-center text-gray-500 mb-6 line-clamp-2">"{sharingRecipe.title}"</p>
 
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              {/* ปุ่มแชร์ไป Facebook */}
+              <a 
+                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex flex-col items-center justify-center bg-blue-50 text-blue-600 p-4 rounded-2xl hover:bg-blue-100 transition-colors"
+              >
+                <span className="text-2xl mb-1">📘</span>
+                <span className="text-xs font-bold">Facebook</span>
+              </a>
+
+              {/* ปุ่มแชร์ไป LINE */}
+              <a 
+                href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="flex flex-col items-center justify-center bg-green-50 text-green-600 p-4 rounded-2xl hover:bg-green-100 transition-colors"
+              >
+                <span className="text-2xl mb-1">💬</span>
+                <span className="text-xs font-bold">LINE</span>
+              </a>
+            </div>
+
+            {/* ปุ่มคัดลอกลิงก์ */}
+            <div className="border-t border-gray-100 pt-4">
+              <button 
+                onClick={() => {
+                  const shareUrl = `${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`;
+                  navigator.clipboard.writeText(`มาดูสูตร "${sharingRecipe.title}" น่ากินมากเลย! 👨‍🍳✨ \nลิงก์: ${shareUrl}`);
+                  toast.success("คัดลอกลิงก์เรียบร้อย! 📋");
+                  setSharingRecipe(null); // ปิดป๊อปอัปหลังก๊อปปี้เสร็จ
+                }}
+                className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
+              >
+                <span>🔗</span>
+                <span>คัดลอกลิงก์</span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 export default App;
