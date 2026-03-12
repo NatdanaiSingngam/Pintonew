@@ -563,35 +563,7 @@ const handleShare = (recipe) => {
                 );
               })()}
 
-              <div className="border-t border-gray-100 pt-8 mt-8">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg"><span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})</h3>
-                {!currentUser?.isAnonymous ? (
-                  <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
-                    <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
-                    <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-                      <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
-                      <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
-                    </div>
-                  </form>
-                ) : <div className="bg-gray-50 text-center py-4 rounded-xl text-sm text-gray-500 mb-6 border border-gray-100">โปรดล็อกอินด้วย Google เพื่อแสดงความคิดเห็น 🧑‍🍳</div>}
-                <div className="space-y-4">
-                  {selectedRecipe.comments?.slice().reverse().map((c) => (
-                    <div key={c.id} className="flex space-x-3">
-                      <img src={c.photoURL} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
-                      <div className="bg-gray-50 rounded-2xl rounded-tl-none px-4 py-2 border border-gray-100"><p className="text-xs font-bold text-gray-700 mb-1">{c.author}</p><p className="text-sm text-gray-600">{c.text}</p></div>
-                    </div>
-                  ))}
-                  {(!selectedRecipe.comments || selectedRecipe.comments.length === 0) && <p className="text-center text-gray-400 text-sm py-4">ยังไม่มีความคิดเห็น มาเป็นคนแรกที่รีวิวกันเถอะ!</p>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-{/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
+              {/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
       {sharingRecipe && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSharingRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -643,4 +615,34 @@ const handleShare = (recipe) => {
           </div>
         </div>
       )}
+
+              <div className="border-t border-gray-100 pt-8 mt-8">
+                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg"><span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})</h3>
+                {!currentUser?.isAnonymous ? (
+                  <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
+                    <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                    <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+                      <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
+                      <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
+                    </div>
+                  </form>
+                ) : <div className="bg-gray-50 text-center py-4 rounded-xl text-sm text-gray-500 mb-6 border border-gray-100">โปรดล็อกอินด้วย Google เพื่อแสดงความคิดเห็น 🧑‍🍳</div>}
+                <div className="space-y-4">
+                  {selectedRecipe.comments?.slice().reverse().map((c) => (
+                    <div key={c.id} className="flex space-x-3">
+                      <img src={c.photoURL} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
+                      <div className="bg-gray-50 rounded-2xl rounded-tl-none px-4 py-2 border border-gray-100"><p className="text-xs font-bold text-gray-700 mb-1">{c.author}</p><p className="text-sm text-gray-600">{c.text}</p></div>
+                    </div>
+                  ))}
+                  {(!selectedRecipe.comments || selectedRecipe.comments.length === 0) && <p className="text-center text-gray-400 text-sm py-4">ยังไม่มีความคิดเห็น มาเป็นคนแรกที่รีวิวกันเถอะ!</p>}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default App;
