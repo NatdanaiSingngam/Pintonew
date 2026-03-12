@@ -1,4 +1,3 @@
-// แก้บรรทัดแรกให้เป็นแบบนี้
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from './contexts/AuthContext';
 import { db, auth } from './firebase'; 
@@ -45,19 +44,17 @@ function App() {
   const [filterTab, setFilterTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState("ทั้งหมด"); 
   const [viewingProfile, setViewingProfile] = useState(null); 
-  // วาง 3 บรรทัดนี้เข้าไปครับ 👇
+  
   const dragItem = useRef(); 
   const dragOverItem = useRef(); 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-  // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [editingCommentId, setEditingCommentId] = useState(null); 
   const [editCommentText, setEditCommentText] = useState("");
-    // 👇 State สำหรับควบคุมป๊อปอัปแชร์ของเราเอง
   const [sharingRecipe, setSharingRecipe] = useState(null);
 
-  const [recipeLimit, setRecipeLimit] = useState(16); // โหลดครั้งแรก 16 เมนู
+  const [recipeLimit, setRecipeLimit] = useState(16);
   const [hasMore, setHasMore] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -72,16 +69,13 @@ function App() {
   const [imagePreviews, setImagePreviews] = useState([]); 
   const [isUploading, setIsUploading] = useState(false);
 
-useEffect(() => {
-    // ใส่ limit(recipeLimit) เข้าไปในคำสั่งดึงข้อมูล
+  useEffect(() => {
     const q = query(collection(db, "recipes"), orderBy("createdAt", "desc"), limit(recipeLimit));
-    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const recipesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecipes(recipesData);
       setIsLoadingData(false);
       
-      // ถ้าข้อมูลที่ดึงมา น้อยกว่าลิมิตที่ตั้งไว้ แปลว่า "หมดตู้" แล้ว
       if (recipesData.length < recipeLimit) {
         setHasMore(false);
       } else {
@@ -99,45 +93,29 @@ useEffect(() => {
 
   useEffect(() => {
     const handleScroll = () => {
-      // ตรวจสอบว่าเลื่อนจอมาเหลือระยะประมาณ 800px (ประมาณ 2-3 แถว) ก่อนถึงล่างสุดหรือยัง
-      if (
-        window.innerHeight + document.documentElement.scrollTop >=
-        document.documentElement.offsetHeight - 800
-      ) {
-        // ถ้าถึงแล้ว + ยังมีข้อมูลให้โหลด + ไม่ได้กำลังโหลดอยู่ ให้ดึงมาเพิ่มอีก 16 อัน
+      if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 800) {
         if (hasMore && !isLoadingData) {
           setRecipeLimit((prev) => prev + 16);
         }
       }
     };
-
-    // เปิดเรดาร์จับการเลื่อน
     window.addEventListener('scroll', handleScroll);
-    
-    // ปิดเรดาร์เมื่อไม่ได้อยู่หน้านี้ (ป้องกันเมมโมรี่รั่ว)
     return () => window.removeEventListener('scroll', handleScroll);
   }, [hasMore, isLoadingData]);
 
-
   useEffect(() => {
-    // อ่านค่าจาก URL ว่ามี ?recipeId=... ห้อยมาด้วยไหม
     const params = new URLSearchParams(window.location.search);
     const sharedRecipeId = params.get("recipeId");
 
-    // ถ้ามีรหัสห้อยมา + โหลดข้อมูลสูตรจากฐานข้อมูลเสร็จแล้ว
     if (sharedRecipeId && recipes.length > 0) {
       const recipeToOpen = recipes.find(r => r.id === sharedRecipeId);
-      
-      // ถ้าเจอสูตรนั้นในระบบ ให้สั่งเปิด Popup ทันที!
       if (recipeToOpen) {
         setSelectedRecipe(recipeToOpen);
         setCurrentImageIndex(0);
-        
-        // ลบรหัสออกจาก URL (เพื่อให้ URL กลับมาสะอาด และป้องกันการเด้งซ้ำเวลากดรีเฟรช)
         window.history.replaceState(null, '', window.location.pathname);
       }
     }
-  }, [recipes]); // ให้ทำงานทุกครั้งที่ข้อมูลสูตร (recipes) โหลดเสร็จ
+  }, [recipes]);
 
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
@@ -183,15 +161,12 @@ useEffect(() => {
     const _imageFiles = [...imageFiles];
     const _imagePreviews = [...imagePreviews];
     
-    // ดึงตัวที่ลากออกมา
     const draggedFile = _imageFiles.splice(dragItem.current, 1)[0];
     const draggedPreview = _imagePreviews.splice(dragItem.current, 1)[0];
     
-    // เอาไปแทรกในตำแหน่งใหม่
     _imageFiles.splice(dragOverItem.current, 0, draggedFile);
     _imagePreviews.splice(dragOverItem.current, 0, draggedPreview);
     
-    // เคลียร์ค่า
     dragItem.current = null;
     dragOverItem.current = null;
     
@@ -266,14 +241,12 @@ useEffect(() => {
       setCommentText(""); toast.success("ส่งความคิดเห็นแล้ว 💬");
     } catch (error) { toast.error("ส่งความคิดเห็นไม่สำเร็จ"); }
   };
+
   const handleDeleteComment = async (recipeId, commentObj) => {
     if (window.confirm("แน่ใจนะว่าจะลบความคิดเห็นนี้?")) {
       try {
         const recipeRef = doc(db, "recipes", recipeId);
-        // ใช้คำสั่ง arrayRemove เพื่อลบ object คอมเมนต์นั้นทิ้งไปเลย
-        await updateDoc(recipeRef, {
-          comments: arrayRemove(commentObj)
-        });
+        await updateDoc(recipeRef, { comments: arrayRemove(commentObj) });
         toast.success("ลบความคิดเห็นแล้ว 🗑️");
       } catch (error) {
         console.error("Delete comment error:", error);
@@ -282,30 +255,27 @@ useEffect(() => {
     }
   };
 
-  // ✏️ ฟังก์ชันบันทึกการแก้ไขคอมเมนต์
   const handleEditCommentSave = async (recipeId, commentId) => {
     if (!editCommentText.trim()) return;
     try {
       const recipeRef = doc(db, "recipes", recipeId);
-      // สร้าง Array คอมเมนต์ชุดใหม่ โดยเปลี่ยน text แค่อันที่ id ตรงกัน
       const updatedComments = selectedRecipe.comments.map(c => 
         c.id === commentId ? { ...c, text: editCommentText } : c
       );
-      
-      // ส่ง Array ชุดใหม่ไปอัปเดตทับของเดิม
       await updateDoc(recipeRef, { comments: updatedComments });
-      
-      setEditingCommentId(null); // ปิดโหมดแก้ไข
-      setEditCommentText(""); // ล้างค่า
+      setEditingCommentId(null); 
+      setEditCommentText(""); 
       toast.success("แก้ไขความคิดเห็นแล้ว ✏️");
     } catch (error) {
       console.error("Edit comment error:", error);
       toast.error("แก้ไขความคิดเห็นไม่สำเร็จ");
     }
   };
-const handleShare = (recipe) => {
-    setSharingRecipe(recipe); // แค่สั่งให้เก็บข้อมูลสูตร แล้วเดี๋ยวป๊อปอัปจะเด้งขึ้นมาเอง
+
+  const handleShare = (recipe) => {
+    setSharingRecipe(recipe); 
   };
+
   const filteredRecipes = recipes.filter(r => {
     const isOwner = currentUser && r.authorId === currentUser.uid;
     const isPublic = r.isPublic !== false;
@@ -390,9 +360,7 @@ const handleShare = (recipe) => {
           </>
         )}
 
-        {/* 👇 3. ดักจับสถานะ Loading ตรงนี้ */}
         {isLoadingData ? (
-          // 🦴 กล่องกระดูกงู (Skeleton Loading) กะพริบระหว่างรอข้อมูล
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 animate-pulse">
@@ -412,13 +380,11 @@ const handleShare = (recipe) => {
             ))}
           </div>
         ) : filteredRecipes.length === 0 ? (
-          // ถ้าโหลดเสร็จแล้วแต่ไม่มีข้อมูล
           <div className="text-center py-20 text-gray-500">
              <span className="text-4xl block mb-4">🔍</span>
              {viewingProfile ? "เชฟคนนี้ยังไม่มีผลงานที่เปิดสาธารณะเลยครับ" : "ไม่พบสูตรอาหารในหมวดหมู่นี้ ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!"}
           </div>
         ) : (
-          // ข้อมูลของจริง
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
             {filteredRecipes.map((recipe) => (
               <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 relative group cursor-pointer hover:shadow-md transition-shadow">
@@ -450,7 +416,7 @@ const handleShare = (recipe) => {
             ))}
           </div>
         )}
-{/* 👇 เปลี่ยนจากปุ่มกด เป็นไอคอน Loading หมุนๆ เนียนๆ */}
+
         {hasMore && filteredRecipes.length > 0 && (
           <div className="flex justify-center items-center mt-12 mb-8 space-x-2">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
@@ -466,7 +432,6 @@ const handleShare = (recipe) => {
             <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
             <h2 className="text-xl font-bold mb-6">{editingId ? "📝 แก้ไขสูตรอาหาร" : "จดสูตรอาหารใหม่ ✍️"}</h2>
             <form onSubmit={handleSubmitRecipe} className="space-y-4">
-              {/* 🖼️ ภาพตัวอย่าง พร้อมระบบลากสลับตำแหน่ง (Drag & Drop) */}
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
@@ -522,20 +487,15 @@ const handleShare = (recipe) => {
               const images = selectedRecipe.images?.length > 0 ? selectedRecipe.images : [selectedRecipe.image];
               return (
                 <div className="relative w-full h-72 md:h-96 bg-gray-900 flex items-center justify-center group overflow-hidden">
-                  {/* พื้นหลังเบลอๆ ช่วยให้รูปดูมีมิติ */}
                   <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-xl" style={{ backgroundImage: `url(${images[currentImageIndex]})` }}></div>
-                  
-                  {/* รูปภาพหลัก (ขยายใหญ่ขึ้น ไม่โดนตัด) */}
                   <img src={images[currentImageIndex]} className="relative max-w-full max-h-full object-contain drop-shadow-2xl transition-all duration-300" />
                   
-                  {/* ป้ายบอกจำนวนรูป */}
                   {images.length > 1 && (
                     <div className="absolute top-4 left-4 bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm z-10 shadow-md">
                       {currentImageIndex + 1} / {images.length}
                     </div>
                   )}
 
-                  {/* ปุ่มเลื่อนซ้าย */}
                   {images.length > 1 && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length); }} 
@@ -545,7 +505,6 @@ const handleShare = (recipe) => {
                     </button>
                   )}
 
-                  {/* ปุ่มเลื่อนขวา */}
                   {images.length > 1 && (
                     <button 
                       onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev + 1) % images.length); }} 
@@ -620,7 +579,6 @@ const handleShare = (recipe) => {
                       
                       <div className="flex-1">
                         {editingCommentId === c.id ? (
-                          /* ✏️ โหมดกำลังแก้ไขคอมเมนต์ */
                           <div className="bg-orange-50 rounded-2xl rounded-tl-none p-3 border border-orange-200">
                             <input 
                               type="text" 
@@ -635,12 +593,10 @@ const handleShare = (recipe) => {
                             </div>
                           </div>
                         ) : (
-                          /* 💬 โหมดแสดงคอมเมนต์ปกติ */
                           <div className="bg-gray-50 rounded-2xl rounded-tl-none px-4 py-2 border border-gray-100 relative group inline-block min-w-[50%] max-w-full">
                             <p className="text-xs font-bold text-gray-700 mb-1">{c.author}</p>
                             <p className="text-sm text-gray-600 break-words">{c.text}</p>
                             
-                            {/* 👇 ปุ่ม แก้ไข/ลบ จะโชว์เมื่อเอาเมาส์ชี้ (เฉพาะคอมเมนต์ของตัวเอง) */}
                             {currentUser?.uid === c.uid && (
                               <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 bg-gray-50/90 backdrop-blur-sm pl-2 rounded-bl-lg">
                                 <button onClick={() => { setEditingCommentId(c.id); setEditCommentText(c.text); }} className="text-[10px] text-gray-500 hover:text-orange-500 font-bold p-1 transition-colors">✏️</button>
@@ -662,10 +618,8 @@ const handleShare = (recipe) => {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-{/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
+
+      {/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
       {sharingRecipe && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSharingRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -675,7 +629,6 @@ const handleShare = (recipe) => {
             <p className="text-sm text-center text-gray-500 mb-6 line-clamp-2">"{sharingRecipe.title}"</p>
 
             <div className="grid grid-cols-2 gap-4 mb-6">
-              {/* ปุ่มแชร์ไป Facebook */}
               <a 
                 href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
                 target="_blank" 
@@ -686,7 +639,6 @@ const handleShare = (recipe) => {
                 <span className="text-xs font-bold">Facebook</span>
               </a>
 
-              {/* ปุ่มแชร์ไป LINE */}
               <a 
                 href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
                 target="_blank" 
@@ -698,14 +650,13 @@ const handleShare = (recipe) => {
               </a>
             </div>
 
-            {/* ปุ่มคัดลอกลิงก์ */}
             <div className="border-t border-gray-100 pt-4">
               <button 
                 onClick={() => {
                   const shareUrl = `${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`;
                   navigator.clipboard.writeText(`มาดูสูตร "${sharingRecipe.title}" น่ากินมากเลย! 👨‍🍳✨ \nลิงก์: ${shareUrl}`);
                   toast.success("คัดลอกลิงก์เรียบร้อย! 📋");
-                  setSharingRecipe(null); // ปิดป๊อปอัปหลังก๊อปปี้เสร็จ
+                  setSharingRecipe(null); 
                 }}
                 className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
               >
@@ -717,4 +668,9 @@ const handleShare = (recipe) => {
           </div>
         </div>
       )}
+
+    </div>
+  );
+}
+
 export default App;
