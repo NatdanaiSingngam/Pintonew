@@ -49,12 +49,13 @@ function App() {
   const dragItem = useRef(); 
   const dragOverItem = useRef(); 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  // 👇 State สำหรับควบคุมป๊อปอัปแชร์ของเราเอง
-  const [sharingRecipe, setSharingRecipe] = useState(null);
+
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [editingCommentId, setEditingCommentId] = useState(null); 
   const [editCommentText, setEditCommentText] = useState("");
+    // 👇 State สำหรับควบคุมป๊อปอัปแชร์ของเราเอง
+  const [sharingRecipe, setSharingRecipe] = useState(null);
 
   const [recipeLimit, setRecipeLimit] = useState(16); // โหลดครั้งแรก 16 เมนู
   const [hasMore, setHasMore] = useState(true);
