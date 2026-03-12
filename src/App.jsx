@@ -53,7 +53,8 @@ function App() {
   const [editingCommentId, setEditingCommentId] = useState(null); 
   const [editCommentText, setEditCommentText] = useState("");
   const [sharingRecipe, setSharingRecipe] = useState(null);
-
+// 👇 State สำหรับควบคุม Popup ยืนยันการลบ (แทนที่ window.confirm)
+  const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
   const [recipeLimit, setRecipeLimit] = useState(16);
   const [hasMore, setHasMore] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -225,11 +226,20 @@ function App() {
     await updateDoc(recipeRef, { likedBy: hasLiked ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid) });
   };
 
-  const handleDeleteRecipe = async (recipeId) => {
-    if (window.confirm("แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺")) {
-      try { await deleteDoc(doc(db, "recipes", recipeId)); setSelectedRecipe(null); toast.success("ลบสูตรอาหารเรียบร้อยแล้ว 🗑️"); } 
-      catch (error) { toast.error("ลบข้อมูลไม่สำเร็จ"); }
-    }
+  const handleDeleteRecipe = (recipeId) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "ลบสูตรอาหาร 🗑️",
+      message: "แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺",
+      onConfirm: async () => {
+        try { 
+          await deleteDoc(doc(db, "recipes", recipeId)); 
+          setSelectedRecipe(null); 
+          toast.success("ลบสูตรอาหารเรียบร้อยแล้ว 🗑️"); 
+        } 
+        catch (error) { toast.error("ลบข้อมูลไม่สำเร็จ"); }
+      }
+    });
   };
 
   const handleAddComment = async (e, recipeId) => {
@@ -242,17 +252,22 @@ function App() {
     } catch (error) { toast.error("ส่งความคิดเห็นไม่สำเร็จ"); }
   };
 
-  const handleDeleteComment = async (recipeId, commentObj) => {
-    if (window.confirm("แน่ใจนะว่าจะลบความคิดเห็นนี้?")) {
-      try {
-        const recipeRef = doc(db, "recipes", recipeId);
-        await updateDoc(recipeRef, { comments: arrayRemove(commentObj) });
-        toast.success("ลบความคิดเห็นแล้ว 🗑️");
-      } catch (error) {
-        console.error("Delete comment error:", error);
-        toast.error("ลบความคิดเห็นไม่สำเร็จ");
+  const handleDeleteComment = (recipeId, commentObj) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "ลบความคิดเห็น 💬",
+      message: "แน่ใจนะว่าจะลบความคิดเห็นนี้?",
+      onConfirm: async () => {
+        try {
+          const recipeRef = doc(db, "recipes", recipeId);
+          await updateDoc(recipeRef, { comments: arrayRemove(commentObj) });
+          toast.success("ลบความคิดเห็นแล้ว 🗑️");
+        } catch (error) {
+          console.error("Delete comment error:", error);
+          toast.error("ลบความคิดเห็นไม่สำเร็จ");
+        }
       }
-    }
+    });
   };
 
   const handleEditCommentSave = async (recipeId, commentId) => {
@@ -664,7 +679,33 @@ function App() {
                 <span>คัดลอกลิงก์</span>
               </button>
             </div>
-
+            {/* --- Modal ยืนยันการลบ (Custom Confirm) --- */}
+            {confirmModal.isOpen && (
+              <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+                <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl">
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">{confirmModal.title}</h3>
+                  <p className="text-sm text-gray-600 mb-6">{confirmModal.message}</p>
+                  
+                  <div className="flex justify-end space-x-3">
+                    <button 
+                      onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+                      className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirmModal.onConfirm) confirmModal.onConfirm();
+                        setConfirmModal({ ...confirmModal, isOpen: false }); // ปิด Popup หลังกดลบ
+                      }}
+                      className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-colors"
+                    >
+                      ลบเลย!
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
