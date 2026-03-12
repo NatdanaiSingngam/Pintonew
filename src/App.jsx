@@ -7,29 +7,23 @@ import toast, { Toaster } from 'react-hot-toast';
 
 const IMGBB_API_KEY = "b71476387444bc1fda933927fa2e82e9";
 const CATEGORIES = ["ทั่วไป", "ต้ม", "ผัด", "แกง", "ทอด", "ของหวาน", "เครื่องดื่ม", "คลีน/สุขภาพ"];
+// 👇 แก้ไขปัญหารูปโปรไฟล์แตก ด้วยลิงก์ Avatar สำรองที่เสถียรกว่า
+const DEFAULT_AVATAR = "https://ui-avatars.com/api/?name=User&background=F97316&color=fff"; 
 
 function getTermFrequency(text) {
   if (!text) return {};
   const words = text.split(/[\s,]+/).filter(w => w.trim() !== '');
   const tf = {};
-  words.forEach(w => {
-    const word = w.toLowerCase();
-    tf[word] = (tf[word] || 0) + 1;
-  });
+  words.forEach(w => { const word = w.toLowerCase(); tf[word] = (tf[word] || 0) + 1; });
   return tf;
 }
 
 function calculateCosineSimilarity(tf1, tf2) {
   const uniqueWords = new Set([...Object.keys(tf1), ...Object.keys(tf2)]);
-  let dotProduct = 0;
-  let mag1 = 0;
-  let mag2 = 0;
+  let dotProduct = 0, mag1 = 0, mag2 = 0;
   uniqueWords.forEach(w => {
-    const val1 = tf1[w] || 0;
-    const val2 = tf2[w] || 0;
-    dotProduct += val1 * val2;
-    mag1 += val1 * val1;
-    mag2 += val2 * val2;
+    const val1 = tf1[w] || 0, val2 = tf2[w] || 0;
+    dotProduct += val1 * val2; mag1 += val1 * val1; mag2 += val2 * val2;
   });
   if (mag1 === 0 || mag2 === 0) return 0;
   return dotProduct / (Math.sqrt(mag1) * Math.sqrt(mag2));
@@ -53,8 +47,10 @@ function App() {
   const [editingCommentId, setEditingCommentId] = useState(null); 
   const [editCommentText, setEditCommentText] = useState("");
   const [sharingRecipe, setSharingRecipe] = useState(null);
-// 👇 State สำหรับควบคุม Popup ยืนยันการลบ (แทนที่ window.confirm)
+  
+  // 👇 State สำหรับ Popup ยืนยันการลบ
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', onConfirm: null });
+
   const [recipeLimit, setRecipeLimit] = useState(16);
   const [hasMore, setHasMore] = useState(true);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -76,12 +72,7 @@ function App() {
       const recipesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecipes(recipesData);
       setIsLoadingData(false);
-      
-      if (recipesData.length < recipeLimit) {
-        setHasMore(false);
-      } else {
-        setHasMore(true);
-      }
+      setHasMore(recipesData.length >= recipeLimit);
       
       if (selectedRecipe) {
         const updatedActive = recipesData.find(r => r.id === selectedRecipe.id);
@@ -95,9 +86,7 @@ function App() {
   useEffect(() => {
     const handleScroll = () => {
       if (window.innerHeight + document.documentElement.scrollTop >= document.documentElement.offsetHeight - 800) {
-        if (hasMore && !isLoadingData) {
-          setRecipeLimit((prev) => prev + 16);
-        }
+        if (hasMore && !isLoadingData) setRecipeLimit((prev) => prev + 16);
       }
     };
     window.addEventListener('scroll', handleScroll);
@@ -107,7 +96,6 @@ function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const sharedRecipeId = params.get("recipeId");
-
     if (sharedRecipeId && recipes.length > 0) {
       const recipeToOpen = recipes.find(r => r.id === sharedRecipeId);
       if (recipeToOpen) {
@@ -130,16 +118,13 @@ function App() {
     let finalPhotoURL = currentUser.photoURL;
     try {
       if (profileImageFile) {
-        const imgData = new FormData();
-        imgData.append("image", profileImageFile);
+        const imgData = new FormData(); imgData.append("image", profileImageFile);
         const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imgData });
         const data = await res.json();
         if (data.success) finalPhotoURL = data.data.url;
       }
       await updateProfile(auth.currentUser, { displayName: newDisplayName, photoURL: finalPhotoURL });
-      toast.success("อัปเดตโปรไฟล์สำเร็จ! ✨"); 
-      setIsEditingProfile(false);
-      setShowProfileMenu(false);
+      toast.success("อัปเดตโปรไฟล์สำเร็จ! ✨"); setIsEditingProfile(false); setShowProfileMenu(false);
       setTimeout(() => window.location.reload(), 1500); 
     } catch (error) { toast.error("เกิดข้อผิดพลาดในการบันทึกโปรไฟล์"); } finally { setIsUpdatingProfile(false); }
   };
@@ -148,8 +133,7 @@ function App() {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
       setImageFiles(prev => [...prev, ...files]);
-      const previews = files.map(f => URL.createObjectURL(f));
-      setImagePreviews(prev => [...prev, ...previews]);
+      setImagePreviews(prev => [...prev, ...files.map(f => URL.createObjectURL(f))]);
     }
   };
 
@@ -159,20 +143,13 @@ function App() {
   };
 
   const handleSortImages = () => {
-    const _imageFiles = [...imageFiles];
-    const _imagePreviews = [...imagePreviews];
-    
+    const _imageFiles = [...imageFiles]; const _imagePreviews = [...imagePreviews];
     const draggedFile = _imageFiles.splice(dragItem.current, 1)[0];
     const draggedPreview = _imagePreviews.splice(dragItem.current, 1)[0];
-    
     _imageFiles.splice(dragOverItem.current, 0, draggedFile);
     _imagePreviews.splice(dragOverItem.current, 0, draggedPreview);
-    
-    dragItem.current = null;
-    dragOverItem.current = null;
-    
-    setImageFiles(_imageFiles);
-    setImagePreviews(_imagePreviews);
+    dragItem.current = null; dragOverItem.current = null;
+    setImageFiles(_imageFiles); setImagePreviews(_imagePreviews);
   };
 
   const handleEditClick = (recipe) => {
@@ -193,8 +170,7 @@ function App() {
       let imageUrls = [];
       if (imageFiles.length > 0) {
         for (const file of imageFiles) {
-          const imageFormData = new FormData();
-          imageFormData.append("image", file);
+          const imageFormData = new FormData(); imageFormData.append("image", file);
           const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: "POST", body: imageFormData });
           const data = await res.json();
           if (data.success) imageUrls.push(data.data.url);
@@ -226,17 +202,14 @@ function App() {
     await updateDoc(recipeRef, { likedBy: hasLiked ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid) });
   };
 
+  // 👇 เรียก Popup ยืนยันก่อนลบสูตร
   const handleDeleteRecipe = (recipeId) => {
     setConfirmModal({
       isOpen: true,
       title: "ลบสูตรอาหาร 🗑️",
       message: "แน่ใจนะว่าจะลบสูตรอาหารนี้? ลบแล้วกู้คืนไม่ได้น้า 🥺",
       onConfirm: async () => {
-        try { 
-          await deleteDoc(doc(db, "recipes", recipeId)); 
-          setSelectedRecipe(null); 
-          toast.success("ลบสูตรอาหารเรียบร้อยแล้ว 🗑️"); 
-        } 
+        try { await deleteDoc(doc(db, "recipes", recipeId)); setSelectedRecipe(null); toast.success("ลบสูตรอาหารเรียบร้อยแล้ว 🗑️"); } 
         catch (error) { toast.error("ลบข้อมูลไม่สำเร็จ"); }
       }
     });
@@ -247,11 +220,12 @@ function App() {
     if (!commentText.trim() || currentUser?.isAnonymous) return;
     try {
       const recipeRef = doc(db, "recipes", recipeId);
-      await updateDoc(recipeRef, { comments: arrayUnion({ id: Date.now().toString(), uid: currentUser.uid, author: currentUser.displayName || "เชฟนิรนาม", photoURL: currentUser.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg", text: commentText, createdAt: new Date() }) });
+      await updateDoc(recipeRef, { comments: arrayUnion({ id: Date.now().toString(), uid: currentUser.uid, author: currentUser.displayName || "เชฟนิรนาม", photoURL: currentUser.photoURL || DEFAULT_AVATAR, text: commentText, createdAt: new Date() }) });
       setCommentText(""); toast.success("ส่งความคิดเห็นแล้ว 💬");
     } catch (error) { toast.error("ส่งความคิดเห็นไม่สำเร็จ"); }
   };
 
+  // 👇 เรียก Popup ยืนยันก่อนลบคอมเมนต์
   const handleDeleteComment = (recipeId, commentObj) => {
     setConfirmModal({
       isOpen: true,
@@ -262,10 +236,7 @@ function App() {
           const recipeRef = doc(db, "recipes", recipeId);
           await updateDoc(recipeRef, { comments: arrayRemove(commentObj) });
           toast.success("ลบความคิดเห็นแล้ว 🗑️");
-        } catch (error) {
-          console.error("Delete comment error:", error);
-          toast.error("ลบความคิดเห็นไม่สำเร็จ");
-        }
+        } catch (error) { toast.error("ลบความคิดเห็นไม่สำเร็จ"); }
       }
     });
   };
@@ -274,22 +245,13 @@ function App() {
     if (!editCommentText.trim()) return;
     try {
       const recipeRef = doc(db, "recipes", recipeId);
-      const updatedComments = selectedRecipe.comments.map(c => 
-        c.id === commentId ? { ...c, text: editCommentText } : c
-      );
+      const updatedComments = selectedRecipe.comments.map(c => c.id === commentId ? { ...c, text: editCommentText } : c );
       await updateDoc(recipeRef, { comments: updatedComments });
-      setEditingCommentId(null); 
-      setEditCommentText(""); 
-      toast.success("แก้ไขความคิดเห็นแล้ว ✏️");
-    } catch (error) {
-      console.error("Edit comment error:", error);
-      toast.error("แก้ไขความคิดเห็นไม่สำเร็จ");
-    }
+      setEditingCommentId(null); setEditCommentText(""); toast.success("แก้ไขความคิดเห็นแล้ว ✏️");
+    } catch (error) { toast.error("แก้ไขความคิดเห็นไม่สำเร็จ"); }
   };
 
-  const handleShare = (recipe) => {
-    setSharingRecipe(recipe); 
-  };
+  const handleShare = (recipe) => setSharingRecipe(recipe); 
 
   const filteredRecipes = recipes.filter(r => {
     const isOwner = currentUser && r.authorId === currentUser.uid;
@@ -322,7 +284,6 @@ function App() {
               {searchQuery && <button onClick={() => setSearchQuery("")} className="absolute right-4 top-2 text-gray-400 hover:text-gray-600">✕</button>}
             </div>
           </div>
-
           <div className="flex items-center space-x-4">
             <button onClick={() => { setEditingId(null); setFormData({ title: '', category: 'ทั่วไป', ingredients: '', instructions: '', isPublic: true }); setImageFiles([]); setImagePreviews([]); setIsCreating(true); }} className="bg-orange-500 text-white px-5 py-2 rounded-full font-medium shadow-sm hover:bg-orange-600 transition-colors">+ สร้างสูตร</button>
             {currentUser?.isAnonymous ? (
@@ -332,7 +293,7 @@ function App() {
             ) : (
               <div className="relative">
                 <div className="w-10 h-10 rounded-full border-2 border-orange-200 cursor-pointer overflow-hidden bg-gray-100 shadow-sm hover:ring-2 hover:ring-orange-300 transition-all" onClick={() => setShowProfileMenu(!showProfileMenu)}>
-                  <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} alt="P" className="w-full h-full object-cover" />
+                  <img src={currentUser?.photoURL || DEFAULT_AVATAR} alt="P" className="w-full h-full object-cover" />
                 </div>
                 {showProfileMenu && (
                   <div className="absolute right-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50">
@@ -368,9 +329,7 @@ function App() {
             </div>
             <div className="flex space-x-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
               <button onClick={() => setActiveCategory("ทั้งหมด")} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
-              {CATEGORIES.map(cat => (
-                <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>{cat}</button>
-              ))}
+              {CATEGORIES.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>{cat}</button> )}
             </div>
           </>
         )}
@@ -380,49 +339,32 @@ function App() {
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 animate-pulse">
                 <div className="w-full bg-gray-200 aspect-square"></div>
-                <div className="p-4">
-                  <div className="h-4 bg-gray-300 rounded-full w-3/4 mb-3"></div>
-                  <div className="h-3 bg-gray-200 rounded-full w-1/2 mb-4"></div>
-                  <div className="flex justify-between items-center mt-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
-                      <div className="h-3 bg-gray-200 rounded w-16"></div>
-                    </div>
-                    <div className="h-4 bg-gray-200 rounded w-10"></div>
-                  </div>
-                </div>
+                <div className="p-4"><div className="h-4 bg-gray-300 rounded-full w-3/4 mb-3"></div><div className="h-3 bg-gray-200 rounded-full w-1/2 mb-4"></div></div>
               </div>
             ))}
           </div>
         ) : filteredRecipes.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-             <span className="text-4xl block mb-4">🔍</span>
-             {viewingProfile ? "เชฟคนนี้ยังไม่มีผลงานที่เปิดสาธารณะเลยครับ" : "ไม่พบสูตรอาหารในหมวดหมู่นี้ ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!"}
-          </div>
+          <div className="text-center py-20 text-gray-500"><span className="text-4xl block mb-4">🔍</span>{viewingProfile ? "เชฟคนนี้ยังไม่มีผลงานเลยครับ" : "ไม่พบสูตรอาหาร ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!"}</div>
         ) : (
           <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
             {filteredRecipes.map((recipe) => (
               <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 relative group cursor-pointer hover:shadow-md transition-shadow">
                 {recipe.isPublic === false && <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full z-10 backdrop-blur-sm">🔒 ส่วนตัว</div>}
-                
                 <div className="w-full bg-gray-200 overflow-hidden relative aspect-square">
-                   <img src={recipe.image || recipe.images?.[0]} alt={recipe.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                   {recipe.category && (
-                     <div className="absolute bottom-2 left-2 bg-white/90 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-lg backdrop-blur-sm shadow-sm">{recipe.category}</div>
-                   )}
+                   <img src={recipe.image || recipe.images?.[0]} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                   {recipe.category && <div className="absolute bottom-2 left-2 bg-white/90 text-orange-600 text-[10px] font-bold px-2 py-1 rounded-lg backdrop-blur-sm shadow-sm">{recipe.category}</div>}
                 </div>
                 <div className="p-4">
                   <h3 className="font-bold text-gray-800 line-clamp-2">{recipe.title}</h3>
                   <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
-                    <div className="flex items-center space-x-1 p-1 -ml-1 rounded-md hover:bg-orange-50 transition-colors z-20 cursor-pointer" onClick={(e) => { e.stopPropagation(); setViewingProfile({ uid: recipe.authorId, name: recipe.author }); setSelectedRecipe(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} title="คลิกเพื่อดูผลงานของเชฟคนนี้">
+                    <div className="flex items-center space-x-1 p-1 -ml-1 rounded-md hover:bg-orange-50 transition-colors z-20 cursor-pointer" onClick={(e) => { e.stopPropagation(); setViewingProfile({ uid: recipe.authorId, name: recipe.author }); setSelectedRecipe(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
                       <div className="w-5 h-5 bg-orange-100 rounded-full flex items-center justify-center text-[10px] font-bold text-orange-600">{recipe.author?.[0] || 'U'}</div>
                       <span className="truncate max-w-[80px] hover:text-orange-600 font-medium">{recipe.author}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <span className="text-gray-400">💬 {recipe.comments?.length || 0}</span>
                       <button onClick={(e) => handleLike(e, recipe)} className={`flex items-center space-x-1 px-2 py-1 rounded-full transition-colors ${recipe.likedBy?.includes(currentUser?.uid) ? 'text-red-500 bg-red-50' : 'text-gray-400 bg-gray-50 hover:bg-red-50 hover:text-red-500'}`}>
-                        <span>{recipe.likedBy?.includes(currentUser?.uid) ? '❤️' : '🤍'}</span>
-                        <span>{recipe.likedBy?.length || 0}</span>
+                        <span>{recipe.likedBy?.includes(currentUser?.uid) ? '❤️' : '🤍'}</span><span>{recipe.likedBy?.length || 0}</span>
                       </button>
                     </div>
                   </div>
@@ -434,8 +376,7 @@ function App() {
 
         {hasMore && filteredRecipes.length > 0 && (
           <div className="flex justify-center items-center mt-12 mb-8 space-x-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div>
-            <span className="text-gray-400 text-sm font-bold">กำลังโหลดเมนูอร่อยๆ เพิ่ม...</span>
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-500"></div><span className="text-gray-400 text-sm font-bold">กำลังโหลดเมนูเพิ่ม...</span>
           </div>
         )}
       </main>
@@ -450,43 +391,29 @@ function App() {
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
-                    <div 
-                      key={idx} 
-                      draggable
-                      onDragStart={(e) => (dragItem.current = idx)}
-                      onDragEnter={(e) => (dragOverItem.current = idx)}
-                      onDragEnd={handleSortImages}
-                      onDragOver={(e) => e.preventDefault()}
-                      className="relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-transparent hover:border-orange-400 cursor-move transition-all"
-                      title="คลิกค้างแล้วลากเพื่อสลับตำแหน่ง"
-                    >
+                    <div key={idx} draggable onDragStart={(e) => (dragItem.current = idx)} onDragEnter={(e) => (dragOverItem.current = idx)} onDragEnd={handleSortImages} onDragOver={(e) => e.preventDefault()} className="relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-transparent hover:border-orange-400 cursor-move transition-all">
                       <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md z-10">{idx + 1}</div>
                       <img src={preview} className="w-full h-full object-cover pointer-events-none" />
-                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 z-10 shadow-sm">✕</button>
+                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs z-10">✕</button>
                     </div>
                   ))}
                 </div>
               )}
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2 flex justify-between items-end">
-                  <span>รูปภาพอาหาร {editingId && <span className="text-orange-500 text-xs">(หากเลือกรูปใหม่ รูปเดิมจะถูกแทนที่)</span>}</span>
-                </label>
-                <input type="file" multiple accept="image/*" onChange={handleImagesChange} className="w-full text-sm border p-2 rounded-xl bg-gray-50" />
-              </div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label><input type="text" placeholder="เช่น กะเพราหมูสับ" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" /></div>
+              <div><input type="file" multiple accept="image/*" onChange={handleImagesChange} className="w-full text-sm border p-2 rounded-xl bg-gray-50" /></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label><input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" /></div>
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">หมวดหมู่</label>
                 <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 bg-white">
                   {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                 </select>
               </div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label><textarea placeholder="หมูสับ, ใบกะเพรา..." value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="2"></textarea></div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">วิธีทำ</label><textarea placeholder="1. ตั้งกระทะ..." value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="3"></textarea></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label><textarea value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="2"></textarea></div>
+              <div><label className="block text-sm font-bold text-gray-700 mb-1">วิธีทำ</label><textarea value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="3"></textarea></div>
               <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300">
-                <div><p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p><p className="text-[10px] text-gray-500">{currentUser?.isAnonymous ? "บัญชี Guest ไม่สามารถแชร์สาธารณะได้" : "เปิดเพื่อให้คนอื่นเห็นสูตรนี้ในฟีดรวมได้"}</p></div>
+                <div><p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p></div>
                 {!currentUser?.isAnonymous && <div onClick={() => setFormData({...formData, isPublic: !formData.isPublic})} className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors ${formData.isPublic ? 'bg-green-500' : 'bg-gray-400'}`}><div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${formData.isPublic ? 'translate-x-6' : ''}`}></div></div>}
               </div>
-              <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2 shadow-md">{isUploading ? "⏳ กำลังบันทึก..." : (editingId ? "✅ บันทึกการแก้ไข" : "✅ บันทึกสูตรอาหาร")}</button>
+              <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2">{isUploading ? "⏳ กำลังบันทึก..." : "✅ บันทึกสูตรอาหาร"}</button>
             </form>
           </div>
         </div>
@@ -497,37 +424,15 @@ function App() {
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSelectedRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-0 relative shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedRecipe(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white rounded-full w-8 h-8 flex items-center justify-center z-10">✕</button>
-            {/* 🖼️ สไลเดอร์รูปภาพ (Image Slider) */}
             {(() => {
               const images = selectedRecipe.images?.length > 0 ? selectedRecipe.images : [selectedRecipe.image];
               return (
                 <div className="relative w-full h-72 md:h-96 bg-gray-900 flex items-center justify-center group overflow-hidden">
                   <div className="absolute inset-0 bg-cover bg-center opacity-30 blur-xl" style={{ backgroundImage: `url(${images[currentImageIndex]})` }}></div>
                   <img src={images[currentImageIndex]} className="relative max-w-full max-h-full object-contain drop-shadow-2xl transition-all duration-300" />
-                  
-                  {images.length > 1 && (
-                    <div className="absolute top-4 left-4 bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm z-10 shadow-md">
-                      {currentImageIndex + 1} / {images.length}
-                    </div>
-                  )}
-
-                  {images.length > 1 && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length); }} 
-                      className="absolute left-4 w-10 h-10 bg-white/30 hover:bg-white/60 backdrop-blur-md rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 transition-all z-10 shadow-lg"
-                    >
-                      &#10094;
-                    </button>
-                  )}
-
-                  {images.length > 1 && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev + 1) % images.length); }} 
-                      className="absolute right-4 w-10 h-10 bg-white/30 hover:bg-white/60 backdrop-blur-md rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 transition-all z-10 shadow-lg"
-                    >
-                      &#10095;
-                    </button>
-                  )}
+                  {images.length > 1 && <div className="absolute top-4 left-4 bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full backdrop-blur-sm z-10">{currentImageIndex + 1} / {images.length}</div>}
+                  {images.length > 1 && <button onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev - 1 + images.length) % images.length); }} className="absolute left-4 w-10 h-10 bg-white/30 hover:bg-white/60 rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 z-10">&#10094;</button>}
+                  {images.length > 1 && <button onClick={(e) => { e.stopPropagation(); setCurrentImageIndex(prev => (prev + 1) % images.length); }} className="absolute right-4 w-10 h-10 bg-white/30 hover:bg-white/60 rounded-full flex items-center justify-center text-white font-bold text-xl opacity-0 group-hover:opacity-100 z-10">&#10095;</button>}
                 </div>
               );
             })()}
@@ -551,7 +456,6 @@ function App() {
               <div className="bg-orange-50 p-6 rounded-2xl mb-4 border border-orange-100"><h4 className="font-bold text-orange-800 mb-3 flex items-center"><span className="mr-2 text-xl">🍳</span> วัตถุดิบ</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedRecipe.ingredients}</p></div>
               <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm mb-8"><h4 className="font-bold text-gray-800 mb-3 flex items-center"><span className="mr-2 text-xl">🥣</span> วิธีทำ</h4><p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{selectedRecipe.instructions}</p></div>
               
-              {/* 🧠 AI Recommendation Section */}
               {(() => {
                 const activeTf = getTermFrequency((selectedRecipe.ingredients || "") + " " + (selectedRecipe.title || ""));
                 const recommended = recipes.filter(r => r.id !== selectedRecipe.id && r.isPublic !== false)
@@ -565,7 +469,7 @@ function App() {
                       {recommended.map(rec => (
                         <div key={rec.id} onClick={(e) => { e.stopPropagation(); setSelectedRecipe(rec); }} className="min-w-[140px] w-[140px] cursor-pointer group">
                           <div className="h-24 w-full rounded-xl overflow-hidden mb-2 relative border border-gray-200 shadow-sm">
-                            <img src={rec.image || rec.images?.[0]} alt={rec.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
+                            <img src={rec.image || rec.images?.[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
                             <div className="absolute top-1 right-1 bg-white/95 px-1.5 py-0.5 rounded text-[10px] font-bold text-orange-600 shadow-sm">เหมือน {(rec.similarityScore * 100).toFixed(0)}%</div>
                           </div>
                           <h4 className="text-sm font-bold text-gray-700 line-clamp-2 group-hover:text-orange-500">{rec.title}</h4>
@@ -580,28 +484,23 @@ function App() {
                 <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg"><span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})</h3>
                 {!currentUser?.isAnonymous ? (
                   <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
-                    <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                    <img src={currentUser?.photoURL || DEFAULT_AVATAR} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
                     <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
                       <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
                       <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
                     </div>
                   </form>
                 ) : <div className="bg-gray-50 text-center py-4 rounded-xl text-sm text-gray-500 mb-6 border border-gray-100">โปรดล็อกอินด้วย Google เพื่อแสดงความคิดเห็น 🧑‍🍳</div>}
+                
                 <div className="space-y-4">
                   {selectedRecipe.comments?.slice().reverse().map((c) => (
                     <div key={c.id} className="flex space-x-3">
-                      <img src={c.photoURL} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
+                      <img src={c.photoURL || DEFAULT_AVATAR} onError={(e) => {e.target.onerror = null; e.target.src = DEFAULT_AVATAR;}} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
                       
                       <div className="flex-1">
                         {editingCommentId === c.id ? (
                           <div className="bg-orange-50 rounded-2xl rounded-tl-none p-3 border border-orange-200">
-                            <input 
-                              type="text" 
-                              value={editCommentText} 
-                              onChange={(e) => setEditCommentText(e.target.value)} 
-                              className="w-full bg-white border border-orange-200 rounded-xl px-3 py-2 outline-none text-sm mb-2 focus:ring-2 focus:ring-orange-300"
-                              autoFocus
-                            />
+                            <input type="text" value={editCommentText} onChange={(e) => setEditCommentText(e.target.value)} className="w-full bg-white border border-orange-200 rounded-xl px-3 py-2 outline-none text-sm mb-2 focus:ring-2 focus:ring-orange-300" autoFocus />
                             <div className="flex space-x-2 justify-end">
                               <button onClick={() => setEditingCommentId(null)} className="text-xs font-bold text-gray-500 hover:text-gray-700 px-3 py-1 bg-gray-100 rounded-full">ยกเลิก</button>
                               <button onClick={() => handleEditCommentSave(selectedRecipe.id, c.id)} className="text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1 rounded-full shadow-sm">บันทึก</button>
@@ -621,7 +520,6 @@ function App() {
                           </div>
                         )}
                       </div>
-
                     </div>
                   ))}
                   {(!selectedRecipe.comments || selectedRecipe.comments.length === 0) && (
@@ -639,73 +537,29 @@ function App() {
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSharingRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSharingRecipe(null)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold">✕</button>
-            
             <h3 className="text-xl font-bold text-gray-800 mb-4 text-center">📤 แชร์สูตรอาหาร</h3>
             <p className="text-sm text-center text-gray-500 mb-6 line-clamp-2">"{sharingRecipe.title}"</p>
-
             <div className="grid grid-cols-2 gap-4 mb-6">
-              <a 
-                href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex flex-col items-center justify-center bg-blue-50 text-blue-600 p-4 rounded-2xl hover:bg-blue-100 transition-colors"
-              >
-                <span className="text-2xl mb-1">📘</span>
-                <span className="text-xs font-bold">Facebook</span>
-              </a>
-
-              <a 
-                href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex flex-col items-center justify-center bg-green-50 text-green-600 p-4 rounded-2xl hover:bg-green-100 transition-colors"
-              >
-                <span className="text-2xl mb-1">💬</span>
-                <span className="text-xs font-bold">LINE</span>
-              </a>
+              <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center bg-blue-50 text-blue-600 p-4 rounded-2xl hover:bg-blue-100 transition-colors"><span className="text-2xl mb-1">📘</span><span className="text-xs font-bold">Facebook</span></a>
+              <a href={`https://social-plugins.line.me/lineit/share?url=${encodeURIComponent(`${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`)}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center bg-green-50 text-green-600 p-4 rounded-2xl hover:bg-green-100 transition-colors"><span className="text-2xl mb-1">💬</span><span className="text-xs font-bold">LINE</span></a>
             </div>
-
             <div className="border-t border-gray-100 pt-4">
-              <button 
-                onClick={() => {
-                  const shareUrl = `${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`;
-                  navigator.clipboard.writeText(`มาดูสูตร "${sharingRecipe.title}" น่ากินมากเลย! 👨‍🍳✨ \nลิงก์: ${shareUrl}`);
-                  toast.success("คัดลอกลิงก์เรียบร้อย! 📋");
-                  setSharingRecipe(null); 
-                }}
-                className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"
-              >
-                <span>🔗</span>
-                <span>คัดลอกลิงก์</span>
-              </button>
+              <button onClick={() => { navigator.clipboard.writeText(`มาดูสูตร "${sharingRecipe.title}" น่ากินมากเลย! 👨‍🍳✨ \nลิงก์: ${window.location.origin}${window.location.pathname}?recipeId=${sharingRecipe.id}`); toast.success("คัดลอกลิงก์เรียบร้อย! 📋"); setSharingRecipe(null); }} className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2"><span>🔗</span><span>คัดลอกลิงก์</span></button>
             </div>
-            {/* --- Modal ยืนยันการลบ (Custom Confirm) --- */}
-            {confirmModal.isOpen && (
-              <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
-                <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl">
-                  <h3 className="text-xl font-bold text-gray-800 mb-2">{confirmModal.title}</h3>
-                  <p className="text-sm text-gray-600 mb-6">{confirmModal.message}</p>
-                  
-                  <div className="flex justify-end space-x-3">
-                    <button 
-                      onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
-                      className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
-                    >
-                      ยกเลิก
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (confirmModal.onConfirm) confirmModal.onConfirm();
-                        setConfirmModal({ ...confirmModal, isOpen: false }); // ปิด Popup หลังกดลบ
-                      }}
-                      className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-colors"
-                    >
-                      ลบเลย!
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- Modal ยืนยันการลบ (Custom Confirm) --- */}
+      {confirmModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-gray-600 mb-6">{confirmModal.message}</p>
+            <div className="flex justify-end space-x-3">
+              <button onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })} className="px-5 py-2.5 rounded-full text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">ยกเลิก</button>
+              <button onClick={() => { if (confirmModal.onConfirm) confirmModal.onConfirm(); setConfirmModal({ ...confirmModal, isOpen: false }); }} className="px-5 py-2.5 rounded-full text-sm font-bold text-white bg-red-500 hover:bg-red-600 shadow-sm transition-colors">ลบเลย!</button>
+            </div>
           </div>
         </div>
       )}
