@@ -594,6 +594,47 @@ function App() {
         </div>
       )}
 
+      {/* --- Modal แก้ไขโปรไฟล์ (ที่หายไป เอากลับมาแล้ว!) --- */}
+      {isEditingProfile && (
+        <div className="fixed inset-0 bg-black/60 z-[80] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setIsEditingProfile(false)}>
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl text-center" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsEditingProfile(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 font-bold">✕</button>
+            <h2 className="text-xl font-bold mb-6 text-gray-800">📝 แก้ไขโปรไฟล์</h2>
+            
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              {/* รูปโปรไฟล์ */}
+              <div className="relative w-24 h-24 mx-auto mb-4">
+                <img src={newPhotoURL || currentUser?.photoURL || DEFAULT_AVATAR} className="w-full h-full rounded-full object-cover border-4 border-orange-100 shadow-sm" />
+                <label className="absolute bottom-0 right-0 bg-orange-500 text-white w-8 h-8 rounded-full flex items-center justify-center cursor-pointer hover:bg-orange-600 border-2 border-white shadow-md transition-transform hover:scale-110">
+                  <span className="text-xs">📸</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleProfileImageChange} />
+                </label>
+              </div>
+
+              {/* ชื่อที่แสดง */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1 text-left">ชื่อเชฟของคุณ</label>
+                <input 
+                  type="text" 
+                  value={newDisplayName} 
+                  onChange={(e) => setNewDisplayName(e.target.value)} 
+                  className="w-full border border-gray-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 transition-all text-gray-700"
+                  placeholder="ใส่ชื่อที่ต้องการโชว์..."
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={isUpdatingProfile} 
+                className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 transition-colors shadow-sm mt-4"
+              >
+                {isUpdatingProfile ? "⏳ กำลังบันทึก..." : "✅ บันทึกการเปลี่ยนแปลง"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
