@@ -53,6 +53,8 @@ function App() {
   const [sharingRecipe, setSharingRecipe] = useState(null);
   // 👇 1. เพิ่ม State สำหรับสถานะการโหลดข้อมูล
   const [isLoadingData, setIsLoadingData] = useState(true);
+  const [editingCommentId, setEditingCommentId] = useState(null); 
+  const [editCommentText, setEditCommentText] = useState("");
 
   const [recipeLimit, setRecipeLimit] = useState(16); // โหลดครั้งแรก 16 เมนู
   const [hasMore, setHasMore] = useState(true);
@@ -263,7 +265,43 @@ useEffect(() => {
       setCommentText(""); toast.success("ส่งความคิดเห็นแล้ว 💬");
     } catch (error) { toast.error("ส่งความคิดเห็นไม่สำเร็จ"); }
   };
+  const handleDeleteComment = async (recipeId, commentObj) => {
+    if (window.confirm("แน่ใจนะว่าจะลบความคิดเห็นนี้?")) {
+      try {
+        const recipeRef = doc(db, "recipes", recipeId);
+        // ใช้คำสั่ง arrayRemove เพื่อลบ object คอมเมนต์นั้นทิ้งไปเลย
+        await updateDoc(recipeRef, {
+          comments: arrayRemove(commentObj)
+        });
+        toast.success("ลบความคิดเห็นแล้ว 🗑️");
+      } catch (error) {
+        console.error("Delete comment error:", error);
+        toast.error("ลบความคิดเห็นไม่สำเร็จ");
+      }
+    }
+  };
 
+  // ✏️ ฟังก์ชันบันทึกการแก้ไขคอมเมนต์
+  const handleEditCommentSave = async (recipeId, commentId) => {
+    if (!editCommentText.trim()) return;
+    try {
+      const recipeRef = doc(db, "recipes", recipeId);
+      // สร้าง Array คอมเมนต์ชุดใหม่ โดยเปลี่ยน text แค่อันที่ id ตรงกัน
+      const updatedComments = selectedRecipe.comments.map(c => 
+        c.id === commentId ? { ...c, text: editCommentText } : c
+      );
+      
+      // ส่ง Array ชุดใหม่ไปอัปเดตทับของเดิม
+      await updateDoc(recipeRef, { comments: updatedComments });
+      
+      setEditingCommentId(null); // ปิดโหมดแก้ไข
+      setEditCommentText(""); // ล้างค่า
+      toast.success("แก้ไขความคิดเห็นแล้ว ✏️");
+    } catch (error) {
+      console.error("Edit comment error:", error);
+      toast.error("แก้ไขความคิดเห็นไม่สำเร็จ");
+    }
+  };
 const handleShare = (recipe) => {
     setSharingRecipe(recipe); // แค่สั่งให้เก็บข้อมูลสูตร แล้วเดี๋ยวป๊อปอัปจะเด้งขึ้นมาเอง
   };
@@ -563,7 +601,70 @@ const handleShare = (recipe) => {
                 );
               })()}
 
-              {/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
+              <div className="border-t border-gray-100 pt-8 mt-8">
+                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg"><span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})</h3>
+                {!currentUser?.isAnonymous ? (
+                  <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
+                    <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
+                    <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
+                      <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
+                      <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
+                    </div>
+                  </form>
+                ) : <div className="bg-gray-50 text-center py-4 rounded-xl text-sm text-gray-500 mb-6 border border-gray-100">โปรดล็อกอินด้วย Google เพื่อแสดงความคิดเห็น 🧑‍🍳</div>}
+                <div className="space-y-4">
+                  {selectedRecipe.comments?.slice().reverse().map((c) => (
+                    <div key={c.id} className="flex space-x-3">
+                      <img src={c.photoURL} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
+                      
+                      <div className="flex-1">
+                        {editingCommentId === c.id ? (
+                          /* ✏️ โหมดกำลังแก้ไขคอมเมนต์ */
+                          <div className="bg-orange-50 rounded-2xl rounded-tl-none p-3 border border-orange-200">
+                            <input 
+                              type="text" 
+                              value={editCommentText} 
+                              onChange={(e) => setEditCommentText(e.target.value)} 
+                              className="w-full bg-white border border-orange-200 rounded-xl px-3 py-2 outline-none text-sm mb-2 focus:ring-2 focus:ring-orange-300"
+                              autoFocus
+                            />
+                            <div className="flex space-x-2 justify-end">
+                              <button onClick={() => setEditingCommentId(null)} className="text-xs font-bold text-gray-500 hover:text-gray-700 px-3 py-1 bg-gray-100 rounded-full">ยกเลิก</button>
+                              <button onClick={() => handleEditCommentSave(selectedRecipe.id, c.id)} className="text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1 rounded-full shadow-sm">บันทึก</button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* 💬 โหมดแสดงคอมเมนต์ปกติ */
+                          <div className="bg-gray-50 rounded-2xl rounded-tl-none px-4 py-2 border border-gray-100 relative group inline-block min-w-[50%] max-w-full">
+                            <p className="text-xs font-bold text-gray-700 mb-1">{c.author}</p>
+                            <p className="text-sm text-gray-600 break-words">{c.text}</p>
+                            
+                            {/* 👇 ปุ่ม แก้ไข/ลบ จะโชว์เมื่อเอาเมาส์ชี้ (เฉพาะคอมเมนต์ของตัวเอง) */}
+                            {currentUser?.uid === c.uid && (
+                              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1 bg-gray-50/90 backdrop-blur-sm pl-2 rounded-bl-lg">
+                                <button onClick={() => { setEditingCommentId(c.id); setEditCommentText(c.text); }} className="text-[10px] text-gray-500 hover:text-orange-500 font-bold p-1 transition-colors">✏️</button>
+                                <button onClick={() => handleDeleteComment(selectedRecipe.id, c)} className="text-[10px] text-gray-500 hover:text-red-500 font-bold p-1 transition-colors">🗑️</button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  ))}
+                  {(!selectedRecipe.comments || selectedRecipe.comments.length === 0) && (
+                    <p className="text-center text-gray-400 text-sm py-4">ยังไม่มีความคิดเห็น มาเป็นคนแรกที่รีวิวกันเถอะ!</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+{/* --- Modal ป๊อปอัปแชร์สูตรอาหาร (ของเราเอง) --- */}
       {sharingRecipe && (
         <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm" onClick={() => setSharingRecipe(null)}>
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 relative shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -615,34 +716,4 @@ const handleShare = (recipe) => {
           </div>
         </div>
       )}
-
-              <div className="border-t border-gray-100 pt-8 mt-8">
-                <h3 className="font-bold text-gray-800 mb-4 flex items-center text-lg"><span className="mr-2">💬</span> ความคิดเห็น ({selectedRecipe.comments?.length || 0})</h3>
-                {!currentUser?.isAnonymous ? (
-                  <form onSubmit={(e) => handleAddComment(e, selectedRecipe.id)} className="flex items-start space-x-3 mb-6">
-                    <img src={currentUser?.photoURL || "https://www.svgrepo.com/show/529259/user-circle.svg"} className="w-10 h-10 rounded-full object-cover border border-gray-200" />
-                    <div className="flex-1 flex bg-gray-50 border border-gray-200 rounded-2xl overflow-hidden focus-within:border-orange-300 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
-                      <input type="text" value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="เพิ่มความคิดเห็น..." className="flex-1 bg-transparent py-3 px-4 outline-none text-sm text-gray-700" />
-                      <button type="submit" disabled={!commentText.trim()} className="px-4 text-orange-500 font-bold disabled:text-gray-300 hover:bg-orange-50 transition-colors">ส่ง</button>
-                    </div>
-                  </form>
-                ) : <div className="bg-gray-50 text-center py-4 rounded-xl text-sm text-gray-500 mb-6 border border-gray-100">โปรดล็อกอินด้วย Google เพื่อแสดงความคิดเห็น 🧑‍🍳</div>}
-                <div className="space-y-4">
-                  {selectedRecipe.comments?.slice().reverse().map((c) => (
-                    <div key={c.id} className="flex space-x-3">
-                      <img src={c.photoURL} className="w-8 h-8 rounded-full object-cover border border-gray-100 flex-shrink-0" />
-                      <div className="bg-gray-50 rounded-2xl rounded-tl-none px-4 py-2 border border-gray-100"><p className="text-xs font-bold text-gray-700 mb-1">{c.author}</p><p className="text-sm text-gray-600">{c.text}</p></div>
-                    </div>
-                  ))}
-                  {(!selectedRecipe.comments || selectedRecipe.comments.length === 0) && <p className="text-center text-gray-400 text-sm py-4">ยังไม่มีความคิดเห็น มาเป็นคนแรกที่รีวิวกันเถอะ!</p>}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default App;
