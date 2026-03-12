@@ -38,7 +38,7 @@ function App() {
   const [filterTab, setFilterTab] = useState("all");
   const [activeCategory, setActiveCategory] = useState("ทั้งหมด"); 
   const [viewingProfile, setViewingProfile] = useState(null); 
-  
+  const [sortBy, setSortBy] = useState("newest");
   const dragItem = useRef(); 
   const dragOverItem = useRef(); 
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -269,6 +269,17 @@ function App() {
     const searchLower = searchQuery.toLowerCase();
     const matchSearch = r.title?.toLowerCase().includes(searchLower) || r.ingredients?.toLowerCase().includes(searchLower);
     return passesTab && passesCategory && matchSearch;
+  }).sort((a, b) => {
+    // 👇 เพิ่มลอจิกการจัดเรียงตรงนี้
+    if (sortBy === "popular") {
+      const likesA = a.likedBy?.length || 0;
+      const likesB = b.likedBy?.length || 0;
+      if (likesB !== likesA) return likesB - likesA; // เรียงจากไลก์มาก ไปน้อย
+    }
+    // ถ้าเป็น newest (ล่าสุด) หรือยอดไลก์เท่ากัน ให้เรียงตามเวลา (ใหม่สุดอยู่บน)
+    const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+    const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+    return timeB - timeA;
   });
 
   return (
@@ -327,9 +338,28 @@ function App() {
               <button onClick={() => setFilterTab('my_recipes')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'my_recipes' ? 'bg-orange-500 text-white border-orange-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>🍳 สูตรของฉัน</button>
               <button onClick={() => setFilterTab('liked')} className={`px-5 py-2.5 rounded-full text-sm font-bold border transition-all whitespace-nowrap ${filterTab === 'liked' ? 'bg-red-500 text-white border-red-500 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100'}`}>❤️ ที่ถูกใจ</button>
             </div>
-            <div className="flex space-x-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
-              <button onClick={() => setActiveCategory("ทั้งหมด")} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
-              {CATEGORIES.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'}`}>{cat}</button> )}
+            {/* 👇 อัปเกรดแถบหมวดหมู่ และเพิ่ม Dropdown จัดเรียง */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              
+              {/* ฝั่งซ้าย: แถบหมวดหมู่ (เหมือนเดิม) */}
+              <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide flex-1">
+                <button onClick={() => setActiveCategory("ทั้งหมด")} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${activeCategory === "ทั้งหมด" ? 'bg-orange-100 text-orange-600 border-orange-200 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>ทั้งหมด</button>
+                {CATEGORIES.map(cat => <button key={cat} onClick={() => setActiveCategory(cat)} className={`px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors border ${activeCategory === cat ? 'bg-orange-100 text-orange-600 border-orange-200 shadow-sm' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>{cat}</button> )}
+              </div>
+              
+              {/* ฝั่งขวา: ตัวเลือกจัดเรียง (ล่าสุด / ยอดฮิต) */}
+              <div className="flex items-center space-x-2 flex-shrink-0">
+                <span className="text-xs font-bold text-gray-400">เรียงตาม:</span>
+                <select 
+                  value={sortBy} 
+                  onChange={(e) => setSortBy(e.target.value)} 
+                  className="bg-white border border-gray-200 text-gray-700 text-sm rounded-full px-4 py-1.5 outline-none focus:ring-2 focus:ring-orange-300 font-bold shadow-sm cursor-pointer transition-all hover:bg-gray-50"
+                >
+                  <option value="newest">🕒 อัปเดตล่าสุด</option>
+                  <option value="popular">🔥 ยอดฮิต (ไลก์เยอะสุด)</option>
+                </select>
+              </div>
+              
             </div>
           </>
         )}
