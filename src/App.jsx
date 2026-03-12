@@ -418,32 +418,85 @@ function App() {
             <button onClick={() => setIsCreating(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600">✕</button>
             <h2 className="text-xl font-bold mb-6">{editingId ? "📝 แก้ไขสูตรอาหาร" : "จดสูตรอาหารใหม่ ✍️"}</h2>
             <form onSubmit={handleSubmitRecipe} className="space-y-4">
+              
+              {/* --- ส่วนพรีวิวรูปภาพ (เหมือนเดิม) --- */}
               {imagePreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-2">
                   {imagePreviews.map((preview, idx) => (
-                    <div key={idx} draggable onDragStart={(e) => (dragItem.current = idx)} onDragEnter={(e) => (dragOverItem.current = idx)} onDragEnd={handleSortImages} onDragOver={(e) => e.preventDefault()} className="relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-transparent hover:border-orange-400 cursor-move transition-all">
+                    <div key={idx} draggable onDragStart={(e) => (dragItem.current = idx)} onDragEnter={(e) => (dragOverItem.current = idx)} onDragEnd={handleSortImages} onDragOver={(e) => e.preventDefault()} className="relative aspect-square rounded-xl overflow-hidden border-2 border-dashed border-transparent hover:border-orange-400 cursor-move transition-all shadow-sm">
                       <div className="absolute top-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded-md z-10">{idx + 1}</div>
                       <img src={preview} className="w-full h-full object-cover pointer-events-none" />
-                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs z-10">✕</button>
+                      <button type="button" onClick={() => removeImage(idx)} className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs z-10 shadow-md transition-colors">✕</button>
                     </div>
                   ))}
                 </div>
               )}
-              <div><input type="file" multiple accept="image/*" onChange={handleImagesChange} className="w-full text-sm border p-2 rounded-xl bg-gray-50" /></div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label><input type="text" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" /></div>
+
+              {/* 📸 ปุ่มเลือกรูปภาพแบบใหม่ (สวยขึ้น ซ่อนปุ่มเชยๆ) */}
+              <div>
+                <label className="flex flex-col items-center justify-center w-full py-5 border-2 border-dashed border-gray-300 rounded-2xl cursor-pointer bg-gray-50 hover:bg-orange-50 hover:border-orange-300 transition-all group shadow-sm">
+                  <span className="text-3xl mb-2 group-hover:scale-110 transition-transform">📸</span>
+                  <span className="text-sm font-bold text-gray-600 group-hover:text-orange-600">คลิกเพื่อเลือกรูปภาพอาหาร</span>
+                  {editingId && <span className="text-[10px] text-orange-500 mt-1">(หากเลือกรูปใหม่ รูปเดิมจะถูกแทนที่)</span>}
+                  {/* ซ่อน input ตัวจริงไว้ แต่ยังทำงานได้ปกติเมื่อกดที่กล่องนี้ */}
+                  <input type="file" multiple accept="image/*" onChange={handleImagesChange} className="hidden" />
+                </label>
+              </div>
+
+              {/* 📝 ชื่อเมนู */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">ชื่อเมนู</label>
+                <input type="text" placeholder="เช่น กะเพราหมูสับไข่ดาว" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} className="w-full border border-gray-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 text-gray-700 shadow-sm transition-all" />
+              </div>
+
+              {/* 📂 เลือกหมวดหมู่ (เอาแถบเทาออก ใช้ appearance-none) */}
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">หมวดหมู่</label>
-                <select value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 bg-white">
-                  {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                </select>
+                <div className="relative">
+                  <select 
+                    value={formData.category} 
+                    onChange={(e) => setFormData({...formData, category: e.target.value})} 
+                    className="w-full border border-gray-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 bg-white appearance-none cursor-pointer text-gray-700 shadow-sm transition-all"
+                  >
+                    {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
+                  {/* ไอคอนลูกศรชี้ลงทำเอง แทนที่ของเดิม */}
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-gray-400">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                  </div>
+                </div>
               </div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label><textarea value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="2"></textarea></div>
-              <div><label className="block text-sm font-bold text-gray-700 mb-1">วิธีทำ</label><textarea value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300" rows="3"></textarea></div>
-              <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-300">
-                <div><p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p></div>
-                {!currentUser?.isAnonymous && <div onClick={() => setFormData({...formData, isPublic: !formData.isPublic})} className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors ${formData.isPublic ? 'bg-green-500' : 'bg-gray-400'}`}><div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${formData.isPublic ? 'translate-x-6' : ''}`}></div></div>}
+
+              {/* 🍳 ส่วนผสม */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">ส่วนผสม</label>
+                <textarea placeholder="หมูสับ 200g, ใบกะเพรา..." value={formData.ingredients} onChange={(e) => setFormData({...formData, ingredients: e.target.value})} className="w-full border border-gray-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 text-gray-700 shadow-sm transition-all" rows="2"></textarea>
               </div>
-              <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2">{isUploading ? "⏳ กำลังบันทึก..." : "✅ บันทึกสูตรอาหาร"}</button>
+
+              {/* 🥣 วิธีทำ */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">วิธีทำ</label>
+                <textarea placeholder="1. ตั้งกระทะให้ร้อน..." value={formData.instructions} onChange={(e) => setFormData({...formData, instructions: e.target.value})} className="w-full border border-gray-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-orange-300 text-gray-700 shadow-sm transition-all" rows="3"></textarea>
+              </div>
+
+              {/* 🌍 ปุ่มแชร์สาธารณะ */}
+              <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-gray-200 shadow-sm">
+                <div>
+                  <p className="text-sm font-bold text-gray-700">แชร์สาธารณะ</p>
+                  <p className="text-[10px] text-gray-500">{currentUser?.isAnonymous ? "บัญชี Guest ไม่สามารถแชร์สาธารณะได้" : "เปิดเพื่อให้คนอื่นเห็นสูตรนี้ในฟีดรวมได้"}</p>
+                </div>
+                {!currentUser?.isAnonymous && (
+                  <div onClick={() => setFormData({...formData, isPublic: !formData.isPublic})} className={`w-14 h-8 flex items-center rounded-full p-1 cursor-pointer transition-colors ${formData.isPublic ? 'bg-green-500' : 'bg-gray-300'}`}>
+                    <div className={`bg-white w-6 h-6 rounded-full shadow-md transform transition-transform ${formData.isPublic ? 'translate-x-6' : ''}`}></div>
+                  </div>
+                )}
+              </div>
+
+              {/* ✅ ปุ่มบันทึก */}
+              <button type="submit" disabled={isUploading} className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold hover:bg-orange-600 disabled:opacity-50 mt-2 shadow-md transition-colors">
+                {isUploading ? "⏳ กำลังบันทึกข้อมูล..." : (editingId ? "✅ บันทึกการแก้ไข" : "✅ บันทึกสูตรอาหาร")}
+              </button>
+
             </form>
           </div>
         </div>
