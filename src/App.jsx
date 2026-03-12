@@ -335,7 +335,7 @@ function App() {
         )}
 
         {isLoadingData ? (
-          <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {[1, 2, 3, 4, 5, 6].map((n) => (
               <div key={n} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 animate-pulse">
                 <div className="w-full bg-gray-200 aspect-square"></div>
@@ -346,7 +346,7 @@ function App() {
         ) : filteredRecipes.length === 0 ? (
           <div className="text-center py-20 text-gray-500"><span className="text-4xl block mb-4">🔍</span>{viewingProfile ? "เชฟคนนี้ยังไม่มีผลงานเลยครับ" : "ไม่พบสูตรอาหาร ลองค้นหาหรือเพิ่มสูตรใหม่ดูสิครับ!"}</div>
         ) : (
-          <div className="columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {filteredRecipes.map((recipe) => (
               <div key={recipe.id} onClick={() => setSelectedRecipe(recipe)} className="bg-white rounded-2xl shadow-sm overflow-hidden break-inside-avoid border border-gray-100 relative group cursor-pointer hover:shadow-md transition-shadow">
                 {recipe.isPublic === false && <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] px-2 py-1 rounded-full z-10 backdrop-blur-sm">🔒 ส่วนตัว</div>}
