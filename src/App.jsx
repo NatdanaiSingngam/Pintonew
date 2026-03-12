@@ -350,14 +350,21 @@ function App() {
               {/* ฝั่งขวา: ตัวเลือกจัดเรียง (ล่าสุด / ยอดฮิต) */}
               <div className="flex items-center space-x-2 flex-shrink-0">
                 <span className="text-xs font-bold text-gray-400">เรียงตาม:</span>
-                <select 
-                  value={sortBy} 
-                  onChange={(e) => setSortBy(e.target.value)} 
-                  className="bg-white border border-gray-200 text-gray-700 text-sm rounded-full px-4 py-1.5 outline-none focus:ring-2 focus:ring-orange-300 font-bold shadow-sm cursor-pointer transition-all hover:bg-gray-50"
-                >
-                  <option value="newest">🕒 อัปเดตล่าสุด</option>
-                  <option value="popular">🔥 ยอดฮิต (ไลก์เยอะสุด)</option>
-                </select>
+                <div className="relative">
+                  <select 
+                    value={sortBy} 
+                    onChange={(e) => setSortBy(e.target.value)} 
+                    // 👇 เพิ่ม appearance-none และปรับ padding (pr-9) ให้พอดีกับลูกศรใหม่
+                    className="appearance-none bg-white border border-gray-200 text-gray-700 text-sm rounded-full pl-4 pr-9 py-1.5 outline-none focus:ring-2 focus:ring-orange-300 font-bold shadow-sm cursor-pointer transition-all hover:bg-gray-50"
+                  >
+                    <option value="newest">🕒 อัปเดตล่าสุด</option>
+                    <option value="popular">🔥 ยอดฮิต (ไลก์เยอะสุด)</option>
+                  </select>
+                  {/* 👇 ไอคอนลูกศรชี้ลงแบบมินิมอล (ทำเอง ไม่ง้อเบราว์เซอร์) */}
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-400">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                  </div>
+                </div>
               </div>
               
             </div>
