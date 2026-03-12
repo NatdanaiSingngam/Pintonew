@@ -113,6 +113,27 @@ useEffect(() => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [hasMore, isLoadingData]);
 
+
+  useEffect(() => {
+    // อ่านค่าจาก URL ว่ามี ?recipeId=... ห้อยมาด้วยไหม
+    const params = new URLSearchParams(window.location.search);
+    const sharedRecipeId = params.get("recipeId");
+
+    // ถ้ามีรหัสห้อยมา + โหลดข้อมูลสูตรจากฐานข้อมูลเสร็จแล้ว
+    if (sharedRecipeId && recipes.length > 0) {
+      const recipeToOpen = recipes.find(r => r.id === sharedRecipeId);
+      
+      // ถ้าเจอสูตรนั้นในระบบ ให้สั่งเปิด Popup ทันที!
+      if (recipeToOpen) {
+        setSelectedRecipe(recipeToOpen);
+        setCurrentImageIndex(0);
+        
+        // ลบรหัสออกจาก URL (เพื่อให้ URL กลับมาสะอาด และป้องกันการเด้งซ้ำเวลากดรีเฟรช)
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+  }, [recipes]); // ให้ทำงานทุกครั้งที่ข้อมูลสูตร (recipes) โหลดเสร็จ
+  
   const handleProfileImageChange = (e) => {
     const file = e.target.files[0];
     if (file) { setProfileImageFile(file); setNewPhotoURL(URL.createObjectURL(file)); }
@@ -242,10 +263,21 @@ useEffect(() => {
   };
 
   const handleShare = async (recipe) => {
-    const shareData = { title: `Pinto 🍱: ${recipe.title}`, text: `มาดูสูตร "${recipe.title}" น่ากินมากเลย! ลองเข้ามาดูสิ 👨‍🍳✨`, url: window.location.href };
+    // 👇 สร้างลิงก์แชร์ โดยเอา URL หน้าเว็บปัจจุบัน + รหัสสูตรอาหาร
+    const shareUrl = `${window.location.origin}${window.location.pathname}?recipeId=${recipe.id}`;
+
+    const shareData = {
+      title: `Pinto 🍱: ${recipe.title}`,
+      text: `มาดูสูตร "${recipe.title}" น่ากินมากเลย! ลองเข้ามาดูสิ 👨‍🍳✨`,
+      url: shareUrl 
+    };
+
     if (navigator.share) {
       try { await navigator.share(shareData); } catch (error) { console.error("Share failed:", error); }
-    } else { navigator.clipboard.writeText(`${shareData.text} \nลิงก์: ${shareData.url}`); toast.success("คัดลอกลิงก์สำหรับแชร์เรียบร้อยแล้ว! 📋"); }
+    } else { 
+      navigator.clipboard.writeText(`${shareData.text} \nลิงก์: ${shareData.url}`); 
+      toast.success("คัดลอกลิงก์สำหรับแชร์เรียบร้อยแล้ว! 📋"); 
+    }
   };
 
   const filteredRecipes = recipes.filter(r => {
