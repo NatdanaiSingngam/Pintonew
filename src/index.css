@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* --- ซ่อน Scrollbar แนวนอน (สำหรับแถบหมวดหมู่) --- */
+
+/* ซ่อนในเบราว์เซอร์ตระกูล Chrome, Safari, Edge รุ่นใหม่ */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ซ่อนในเบราว์เซอร์ Firefox และ Edge รุ่นเก่า */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
